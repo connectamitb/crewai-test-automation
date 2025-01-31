@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CrewAI Test Automation Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <h4 class="mb-4">CrewAI Dashboard</h4>
+        <ul class="nav flex-column">
+            <li class="nav-item mb-2">
+                <a class="nav-link active" href="#">Dashboard</a>
+            </li>
+            <li class="nav-item mb-2">
+                <a class="nav-link" href="#">Test Requirements</a>
+            </li>
+            <li class="nav-item mb-2">
+                <a class="nav-link" href="#">Test Agents</a>
+            </li>
+            <li class="nav-item mb-2">
+                <a class="nav-link" href="#">Execution</a>
+            </li>
+            <li class="nav-item mb-2">
+                <a class="nav-link" href="#">Reports</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="#">Settings</a>
+            </li>
+        </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="content">
+        <div class="container-fluid">
+            <!-- Header -->
+            <div class="row mb-4">
+                <div class="col">
+                    <h1 class="display-4">CrewAI Test Automation System</h1>
+                    <p class="lead">
+                        Automating test generation, execution, debugging, and optimization using advanced AI.
+                    </p>
+                </div>
+            </div>
+            
+            <!-- Test Requirement Input Form -->
+            <div class="row mb-4">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">Input New Test Requirement</div>
+                        <div class="card-body">
+                            <form id="testRequirementForm">
+                                <div class="mb-3">
+                                    <label for="testRequirement" class="form-label">Test Requirement</label>
+                                    <textarea
+                                        class="form-control"
+                                        id="testRequirement"
+                                        rows="3"
+                                        placeholder="e.g., Test login functionality with username and password"
+                                    ></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    Submit Requirement
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Advanced AI Features Cards -->
+            <div class="row">
+                <div class="col">
+                    <h2>Advanced AI Features</h2>
+                    <div class="row">
+                        <!-- Auto-Debugging AI Agent -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Auto-Debugging AI Agent</div>
+                                <div class="card-body">
+                                    <p>
+                                        Automatically analyzes test failure logs to fix common errors (e.g., incorrect XPath, timing issues, parameter mismatches) and retries execution before marking the test as failed.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Self-Healing Locators -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Self-Healing Locators</div>
+                                <div class="card-body">
+                                    <p>
+                                        Detects broken XPaths due to UI changes in Selenium scripts and auto-corrects them using AI-based heuristics and DOM analysis.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- GenAI-Based Test Case Creation -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">GenAI-Based Test Case Creation</div>
+                                <div class="card-body">
+                                    <p>
+                                        Leverages past test cases and execution history to generate new test scenarios, covering edge, regression, and security tests using advanced LLM reasoning and retrieval augmentation.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Exploratory Testing AI Agent -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">Exploratory Testing AI Agent</div>
+                                <div class="card-body">
+                                    <p>
+                                        Monitors UI changes by comparing baseline screenshots with the current UI, and recommends new test scenarios to maintain comprehensive test coverage.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- System Architecture Diagram -->
+            <div class="row mt-4">
+                <div class="col">
+                    <h2>System Architecture Diagram</h2>
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <!-- Simple inline SVG Diagram -->
+                            <svg width="600" height="400">
+                                <!-- User Interface Box -->
+                                <rect x="220" y="20" width="160" height="40" fill="#007bff" />
+                                <text x="300" y="45" fill="#fff" text-anchor="middle" font-size="14">
+                                    User Interface
+                                </text>
+                                <!-- Arrow from UI to CrewAI Agents -->
+                                <line x1="300" y1="60" x2="300" y2="100" stroke="#000" stroke-width="2" />
+                                <!-- CrewAI Agents Box -->
+                                <rect x="150" y="100" width="300" height="120" fill="#28a745" />
+                                <text x="300" y="140" fill="#fff" text-anchor="middle" font-size="16">
+                                    CrewAI Agents
+                                </text>
+                                <text x="300" y="160" fill="#fff" text-anchor="middle" font-size="12">
+                                    (Test Generation, Execution, Debugging, etc.)
+                                </text>
+                                <!-- Arrow from CrewAI Agents to Test Execution -->
+                                <line x1="300" y1="220" x2="300" y2="260" stroke="#000" stroke-width="2" />
+                                <!-- Test Execution Box -->
+                                <rect x="220" y="260" width="160" height="40" fill="#6c757d" />
+                                <text x="300" y="285" fill="#fff" text-anchor="middle" font-size="14">
+                                    Test Execution
+                                </text>
+                            </svg>
+                            <p class="mt-2">Simplified Flow: UI → CrewAI Agents → Test Execution</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
