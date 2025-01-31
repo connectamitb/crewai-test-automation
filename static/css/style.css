@@ -1,8 +1,23 @@
-/* Custom styles for the sidebar */
 body {
-    overflow-x: hidden;
+  background: #f5f5f5;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow-x: hidden;
 }
 
+/* Top Navigation Bar */
+.navbar {
+  background-color: #2a2a2a;
+}
+
+.navbar-brand, .nav-link {
+  color: #fff !important;
+}
+
+.nav-link:hover {
+  color: #ffc107 !important;
+}
+
+/* Custom styles for the sidebar */
 .sidebar {
     height: 100vh;
     position: fixed;
@@ -22,12 +37,61 @@ body {
 .sidebar a:hover {
     color: #ffc107;
 }
-
 .content {
     margin-left: 250px;
     padding: 2rem;
 }
 
+/* Dashboard Cards */
 .card {
+  transition: transform 0.2s;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-bottom: 1rem;
+}
+
+.card:hover {
+  transform: scale(1.03);
+}
+
+.card-header {
+  background-color: #343a40;
+  color: #fff;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.agent-icon {
+  font-size: 1.8rem;
+  margin-right: 0.5rem;
+}
+
+/* SVG Architecture Diagram */
+.architecture-svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Dropdown Menu */
+.dropdown-menu {
+  background-color: #343a40;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.dropdown-item {
+  color: #fff;
+}
+
+.dropdown-item:hover {
+  background-color: #2a2a2a;
+  color: #ffc107;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .card {
     margin-bottom: 1rem;
+  }
 }
