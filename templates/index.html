@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <title>CrewAI Premium Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <!-- Tailwind CSS CDN (for demo purposes) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
 </head>
 <body class="bg-gray-100 text-gray-800">
-
   <!-- Top Navigation Bar -->
   <nav class="bg-gray-800 text-white shadow">
     <div class="max-w-7xl mx-auto px-4">
@@ -38,10 +38,10 @@
           <a href="#" class="hover:text-yellow-300">Test Execution</a>
           <a href="#" class="hover:text-yellow-300">Reports</a>
           <a href="#" class="hover:text-yellow-300">Settings</a>
-          <a href="#" class="hover:text-yellow-300">Profile</a>
-        </div>
-        <div class="md:hidden">
-          <!-- Mobile menu button (optional) -->
+          <div id="authButtons">
+            <a href="/login" id="loginBtn" class="hover:text-yellow-300">Login</a>
+            <a href="/logout" id="logoutBtn" class="hover:text-yellow-300 hidden">Logout</a>
+          </div>
         </div>
       </div>
     </div>
@@ -215,6 +215,32 @@
 
   <!-- Dropdown Script -->
   <script>
+    // Initialize Firebase with configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7TnDnoCloqwEUquaEt6Riu-LcfMKT7k0",
+      authDomain: "testagents-fe32e.firebaseapp.com",
+      projectId: "testagents-fe32e",
+      storageBucket: "testagents-fe32e.firebasestorage.app",
+      messagingSenderId: "617145154949",
+      appId: "1:617145154949:web:200743b0063955bff218ec",
+      measurementId: "G-5CNVKYV5DF"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+
+    // Check authentication state
+    firebase.auth().onAuthStateChanged(function(user) {
+      const loginBtn = document.getElementById('loginBtn');
+      const logoutBtn = document.getElementById('logoutBtn');
+
+      if (user) {
+        loginBtn.classList.add('hidden');
+        logoutBtn.classList.remove('hidden');
+      } else {
+        loginBtn.classList.remove('hidden');
+        logoutBtn.classList.add('hidden');
+      }
+    });
     // Toggle dropdown visibility for Test Agents
     const dropdownButton = document.getElementById('dropdownButton');
     const dropdownMenu = document.getElementById('dropdownMenu');

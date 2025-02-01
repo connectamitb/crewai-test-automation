@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - CrewAI Test Automation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="max-w-md w-full bg-white rounded-lg shadow-md p-8">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-800">Welcome Back</h2>
+                <p class="text-gray-600 mt-2">Sign in to access your dashboard</p>
+            </div>
+            
+            <div class="space-y-4">
+                <button onclick="signInWithGoogle()" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24">
+                        <path d="M12.545,12.151L12.545,12.151c0,1.054,0.855,1.909,1.909,1.909h3.536c-0.416,1.363-1.187,2.572-2.182,3.536 c-1.247,1.247-2.875,1.909-4.625,1.909c-3.619,0-6.545-2.926-6.545-6.545c0-3.619,2.926-6.545,6.545-6.545 c1.75,0,3.378,0.662,4.625,1.909l2.182-2.182C15.819,3.971,13.383,3,10.727,3C5.632,3,1.5,7.132,1.5,12.227s4.132,9.227,9.227,9.227 c4.083,0,7.557-2.543,8.936-6.136l-7.118-3.168V12.151z" fill="#4285F4"/>
+                    </svg>
+                    Sign in with Google
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Firebase with configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyC7TnDnoCloqwEUquaEt6Riu-LcfMKT7k0",
+            authDomain: "testagents-fe32e.firebaseapp.com",
+            projectId: "testagents-fe32e",
+            storageBucket: "testagents-fe32e.firebasestorage.app",
+            messagingSenderId: "617145154949",
+            appId: "1:617145154949:web:200743b0063955bff218ec",
+            measurementId: "G-5CNVKYV5DF"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+
+        function signInWithGoogle() {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            firebase.auth().signInWithPopup(provider)
+                .then((result) => {
+                    // Get ID token
+                    return result.user.getIdToken();
+                })
+                .then((idToken) => {
+                    // Send token to backend
+                    return fetch('/auth', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ idToken: idToken })
+                    });
+                })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (data.status === 'success') {
+                        window.location.href = '/dashboard';
+                    }
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                    alert('Authentication failed. Please try again.');
+                });
+        }
+    </script>
+</body>
+</html>
