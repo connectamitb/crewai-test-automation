@@ -1,0 +1,14 @@
+Metadata-Version: 2.2
+Name: repl-nix-workspace
+Version: 0.1.0
+Summary: Add your description here
+Requires-Python: >=3.11
+Requires-Dist: email-validator>=2.2.0
+Requires-Dist: firebase-admin>=6.6.0
+Requires-Dist: flask>=3.1.0
+Requires-Dist: flask-sqlalchemy>=3.1.1
+Requires-Dist: gunicorn>=23.0.0
+Requires-Dist: paramiko>=3.5.0
+Requires-Dist: psycopg2-binary>=2.9.10
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: requests>=2.32.3

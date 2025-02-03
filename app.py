@@ -1,10 +1,13 @@
 import logging
+import os
 from flask import Flask, render_template, request, jsonify, redirect, url_for
+from services.code_analysis import CursorAIService
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__)
+cursor_ai = CursorAIService()
 
 @app.route('/')
 def index():
@@ -15,12 +18,26 @@ def submit_requirement():
     requirement = request.form.get('requirement')
     if not requirement:
         return jsonify({'error': 'Test requirement is required'}), 400
-    
+
     # Here you would typically process the requirement
     # For now, we'll just log it
     logging.debug(f"Received test requirement: {requirement}")
-    
+
     return jsonify({'message': 'Test requirement received successfully'})
+
+@app.route('/analyze-code', methods=['POST'])
+def analyze_code():
+    """Endpoint to analyze code using Cursor AI"""
+    try:
+        code = request.json.get('code')
+        if not code:
+            return jsonify({'error': 'Code is required'}), 400
+
+        analysis_result = cursor_ai.analyze_code(code)
+        return jsonify(analysis_result)
+    except Exception as e:
+        logging.error(f"Error in code analysis: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/login')
 def login():
