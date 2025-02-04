@@ -1,7 +1,9 @@
 # Core dependencies
-crewai==0.11.0
+crewai==0.14.1
 langchain==0.1.0
-openai>=1.7.1,<2.0.0
+langchain-core==0.1.23
+langchain-openai==0.0.5
+openai==1.12.0
 python-dotenv==1.0.0
 
 # Web framework
@@ -12,9 +14,9 @@ gunicorn==21.2.0
 jinja2==3.1.2
 
 # Testing
-pytest==7.4.3
+pytest==8.0.0
 pytest-cov==4.1.0
-pytest-asyncio==0.23.2
+pytest-asyncio==0.23.5
 
 # Code quality
 black==23.11.0
@@ -23,5 +25,10 @@ mypy==1.7.0
 
 # Utilities
 requests==2.31.0
-pydantic==2.5.2 
+pydantic==2.6.1
+pydantic-settings==2.1.0
+crewai
+pydantic
+asyncio
 langchain
+pydantic

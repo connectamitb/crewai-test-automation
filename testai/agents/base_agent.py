@@ -1,7 +1,6 @@
 from contextlib import contextmanager
 from typing import Generator
 import logging
-from crewai import Agent
 
 class BaseAgent:
     """Base class for all agents with common functionality"""

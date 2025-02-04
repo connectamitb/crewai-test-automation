@@ -1,7 +1,7 @@
 from typing import Dict, Optional, List
 import requests
 from pydantic import BaseModel
-from crewai.config import settings
+from ..config import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,17 +35,15 @@ class StorageIntegrationAgent:
     async def store_test_case(self, test_case: Dict) -> bool:
         """Store test case in Zephyr Scale"""
         try:
-            # Transform steps to Zephyr format
-            steps = [
-                ZephyrTestStep(
-                    description=step,
-                    expectedResult=result
+            # Convert test steps to Zephyr format
+            steps = []
+            for step, expected in zip(test_case["steps"], test_case["expected_results"]):
+                steps.append(
+                    ZephyrTestStep(
+                        description=step,
+                        expectedResult=expected
+                    )
                 )
-                for step, result in zip(
-                    test_case["steps"], 
-                    test_case["expected_results"]
-                )
-            ]
             
             # Create Zephyr test case payload
             payload = ZephyrTestCase(
