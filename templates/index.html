@@ -75,9 +75,41 @@
             Generate Test Case
           </button>
         </form>
-        <div id="result" class="mt-4 hidden">
-          <h3 class="font-bold mb-2">Generated Test Case:</h3>
-          <pre id="testCaseResult" class="bg-gray-100 p-4 rounded"></pre>
+
+        <!-- Enhanced Test Case Result Display -->
+        <div id="result" class="mt-8 hidden">
+          <h3 class="text-xl font-bold mb-4">Generated Test Case:</h3>
+          <div class="bg-gray-50 p-6 rounded-lg">
+            <div class="mb-4">
+              <h4 class="font-semibold text-gray-700">Title</h4>
+              <p id="testCaseTitle" class="mt-1"></p>
+            </div>
+
+            <div class="mb-4">
+              <h4 class="font-semibold text-gray-700">Description</h4>
+              <p id="testCaseDescription" class="mt-1"></p>
+            </div>
+
+            <div class="mb-4">
+              <h4 class="font-semibold text-gray-700">Prerequisites</h4>
+              <ul id="testCasePrerequisites" class="list-disc list-inside mt-1"></ul>
+            </div>
+
+            <div class="mb-4">
+              <h4 class="font-semibold text-gray-700">Test Steps</h4>
+              <ol id="testCaseSteps" class="list-decimal list-inside mt-1"></ol>
+            </div>
+
+            <div class="mb-4">
+              <h4 class="font-semibold text-gray-700">Expected Results</h4>
+              <ol id="testCaseExpectedResults" class="list-decimal list-inside mt-1"></ol>
+            </div>
+
+            <div>
+              <h4 class="font-semibold text-gray-700">Tags</h4>
+              <div id="testCaseTags" class="mt-1 flex flex-wrap gap-2"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -287,7 +319,7 @@
   document.getElementById('testRequirementForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const requirement = document.getElementById('requirement').value;
-    
+
     try {
       const response = await fetch('/api/test-cases', {
         method: 'POST',
@@ -296,12 +328,41 @@
         },
         body: JSON.stringify({ requirement })
       });
-      
+
       const result = await response.json();
-      
-      // Display result
+
+      // Show result section
       document.getElementById('result').classList.remove('hidden');
-      document.getElementById('testCaseResult').textContent = JSON.stringify(result, null, 2);
+
+      // Update test case details
+      const testCase = result.test_case;
+      document.getElementById('testCaseTitle').textContent = testCase.title;
+      document.getElementById('testCaseDescription').textContent = testCase.description;
+
+      // Update prerequisites
+      const prerequisitesList = document.getElementById('testCasePrerequisites');
+      prerequisitesList.innerHTML = testCase.prerequisites
+        .map(prereq => `<li>${prereq}</li>`)
+        .join('');
+
+      // Update steps
+      const stepsList = document.getElementById('testCaseSteps');
+      stepsList.innerHTML = testCase.steps
+        .map(step => `<li>${step}</li>`)
+        .join('');
+
+      // Update expected results
+      const resultsList = document.getElementById('testCaseExpectedResults');
+      resultsList.innerHTML = testCase.expected_results
+        .map(result => `<li>${result}</li>`)
+        .join('');
+
+      // Update tags
+      const tagsContainer = document.getElementById('testCaseTags');
+      tagsContainer.innerHTML = testCase.tags
+        .map(tag => `<span class="px-2 py-1 bg-gray-200 rounded-full text-sm">${tag}</span>`)
+        .join('');
+
     } catch (error) {
       alert('Error generating test case: ' + error.message);
     }
