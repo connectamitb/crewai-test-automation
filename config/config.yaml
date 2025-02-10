@@ -1,6 +1,30 @@
 # CrewAI Test Automation Configuration
 
 agents:
+  requirement_input:
+    id: "requirement_input_001"
+    role: "Requirement Input Processor"
+    goal: "Process and validate incoming test requirements"
+    backstory: "Expert in requirements analysis and validation"
+    allow_delegation: true
+    verbose: true
+
+  nlp_parsing:
+    id: "nlp_parsing_001"
+    role: "NLP Parser"
+    goal: "Extract structured information from requirements"
+    backstory: "Specialist in natural language processing"
+    allow_delegation: true
+    verbose: true
+
+  test_case_mapping:
+    id: "test_case_mapping_001"
+    role: "Test Case Designer"
+    goal: "Generate comprehensive test cases from structured requirements"
+    backstory: "Expert in test case design and automation"
+    allow_delegation: true
+    verbose: true
+
   data_collector:
     id: "data_collector_001"
     role: "Data Collection Specialist"
@@ -41,9 +65,10 @@ orchestration:
     max_delay: 300
 
 tools:
-  webscraper:
+  web_scraper:
     enabled: true
     timeout: 30
+    supported_formats: ["html", "json"]
 
   file_reader:
     enabled: true
