@@ -1,0 +1,65 @@
+# CrewAI Test Automation Configuration
+
+agents:
+  data_collector:
+    id: "data_collector_001"
+    role: "Data Collection Specialist"
+    goal: "Gather and preprocess test requirements and artifacts"
+    backstory: "Expert in data collection and preprocessing with focus on test automation"
+    allow_delegation: true
+    verbose: true
+
+  analyzer:
+    id: "analyzer_001"
+    role: "Test Analysis Expert"
+    goal: "Analyze test requirements and generate structured test specifications"
+    backstory: "Experienced in test analysis and requirement decomposition"
+    allow_delegation: true
+    verbose: true
+
+  strategist:
+    id: "strategist_001"
+    role: "Test Strategy Designer"
+    goal: "Design comprehensive test strategies and coverage plans"
+    backstory: "Strategic thinker with expertise in test planning and optimization"
+    allow_delegation: true
+    verbose: true
+
+  manager:
+    id: "manager_001"
+    role: "Test Orchestration Manager"
+    goal: "Coordinate and oversee test execution across all agents"
+    backstory: "Experienced test manager with strong coordination skills"
+    allow_delegation: true
+    verbose: true
+
+orchestration:
+  strategy: "hierarchical"
+  retry_policy:
+    max_attempts: 3
+    backoff_factor: 2
+    max_delay: 300
+
+tools:
+  webscraper:
+    enabled: true
+    timeout: 30
+
+  file_reader:
+    enabled: true
+    supported_formats: ["txt", "pdf", "docx"]
+
+  code_interpreter:
+    enabled: true
+    timeout: 60
+
+external:
+  llm:
+    primary: "openai"
+    fallback: "cohere"
+    model: "gpt-4"
+
+  vector_db:
+    type: "weaviate"
+    batch_size: 100
+    index_name: "test_cases"
