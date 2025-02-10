@@ -32,3 +32,12 @@ pydantic
 asyncio
 langchain
 pydantic
+crewai
+langchain
+langchain-openai
+pydantic
+crewai==0.14.1
+langchain-community>=0.0.9
+langchain-core>=0.1.23
+langchain-openai>=0.0.5
+openai==1.12.0

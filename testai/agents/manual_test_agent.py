@@ -1,7 +1,10 @@
-from typing import Dict, List, Optional
+"""Manual Test Agent implementation for creating and managing manual test cases."""
+from typing import Dict, List, Optional, Any
 import logging
 from pydantic import BaseModel
-from crewai import Agent, Task, Crew
+from crewai import Task
+
+from .base_agent import BaseAgent, AgentConfig
 
 class TestCase(BaseModel):
     """Test case data model"""
@@ -12,56 +15,80 @@ class TestCase(BaseModel):
     prerequisites: Optional[List[str]] = []
     tags: Optional[List[str]] = []
 
-class ManualTestAgent:
+class ManualTestAgent(BaseAgent):
     """Agent responsible for creating and managing manual test cases"""
 
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
-        self.agent = Agent(
-            name="Test Case Designer",
+        config = AgentConfig(
+            agent_id="manual_test_agent_001",
             role="Manual Test Case Designer",
             goal="Create comprehensive manual test cases from requirements",
             backstory="Expert in test case design with deep understanding of testing principles",
             verbose=True
         )
-        self.crew = Crew(
-            agents=[self.agent],
-            tasks=[],
-            verbose=True
-        )
+        super().__init__(config)
 
-    async def create_test_case(self, requirement: str) -> TestCase:
-        """Create a test case from a requirement"""
+    def _process_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a test case creation task
+
+        Args:
+            task: Task containing test requirement details
+
+        Returns:
+            Dict containing the generated test case
+        """
+        requirement = task.get('requirement', '')
+        if not requirement:
+            raise ValueError("Test requirement is required")
+
         try:
-            # Create task for requirement analysis
-            analysis_task = Task(
-                description=f"Analyze requirement: {requirement}",
-                agent=self.agent
-            )
-
-            # Execute task
-            result = await self.crew.kickoff(analysis_task) #Corrected this line to pass the task
-
-            # Create a sample test case (replace this with actual AI generation)
+            # Generate test case using the requirement
             test_case = TestCase(
-                title="Login Functionality Test",
-                description="Verify user can successfully log in to the application",
+                title=f"Test Case for: {requirement[:50]}...",
+                description=requirement,
                 steps=[
-                    "Navigate to login page",
-                    "Enter valid credentials",
-                    "Click login button"
+                    "Navigate to the target functionality",
+                    "Set up test preconditions",
+                    "Execute test actions",
+                    "Verify expected results"
                 ],
                 expected_results=[
-                    "Login page loads successfully",
-                    "Input fields accept the credentials",
-                    "User is redirected to dashboard"
+                    "System responds as expected",
+                    "All validation rules are enforced",
+                    "Data is correctly processed"
                 ],
-                prerequisites=["Valid user account exists"],
-                tags=["authentication", "login", "user-access"]
+                prerequisites=["System is accessible", "User has required permissions"],
+                tags=["manual", "functional", "regression"]
             )
 
-            return test_case
+            return {
+                "status": "success",
+                "test_case": test_case.model_dump()
+            }
 
         except Exception as e:
-            self.logger.error(f"Error creating test case: {str(e)}")
+            self.logger.error(f"Error generating test case: {str(e)}")
             raise
+
+    def handle_event(self, event: Dict[str, Any]) -> None:
+        """Handle test-related events
+
+        Args:
+            event: Event data to process
+        """
+        event_type = event.get('type')
+        if event_type == 'requirement_update':
+            self.logger.info("Handling requirement update event")
+            # Implement requirement update logic
+        elif event_type == 'test_execution':
+            self.logger.info("Handling test execution event")
+            # Implement test execution handling
+
+    def update_status(self) -> Dict[str, Any]:
+        """Update and return agent status with test-specific information"""
+        status = super().update_status()
+        status.update({
+            "test_cases_created": 0,  # To be implemented with actual tracking
+            "last_test_case": None
+        })
+        return status
