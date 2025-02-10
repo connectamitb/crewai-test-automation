@@ -1,0 +1,443 @@
+"""
+================================================================
+Project: Ultimate CrewAI Multi-Agent System Implementation
+================================================================
+
+Overview:
+---------
+Develop a robust, modular, and extensible multi-agent system using CrewAI. This system must be production–ready and designed for scalability, maintainability, and ease of integration with external services. It must support:
+
+  • Role–Based Agent Design: Each agent has a dedicated role (e.g., Data Collector, Analyzer, Strategist, Manager, Reporter) with a defined backstory, goals, and unique capabilities.
+  • Autonomous Inter–Agent Delegation: Agents should communicate and delegate subtasks among themselves based on expertise.
+  • Flexible Task Management: Tasks must be defined modularly, supporting both synchronous and asynchronous execution with clear descriptions, outputs, priorities, and dependencies.
+  • Crews – Orchestrated Teams of Agents: Create dynamic groups (“crews”) of agents that collaborate to tackle complex problems.
+  • Multi–Model Process Orchestration: Support sequential, hierarchical (manager–driven), and consensual execution strategies using the Strategy design pattern.
+  • Event–Driven Flows: Implement a robust event–driven mechanism (using the Observer pattern) to integrate Python code with agent actions, allowing conditional branching, state management, and notifications.
+  • Extensive Tool Integration: Provide a unified interface (via the Facade design pattern) to built–in tools (web scrapers, file readers, code interpreters) and custom domain–specific tools.
+  • Customization via YAML: Leverage YAML configuration files for defining agent properties, task parameters, orchestration rules, and tool settings. Validate these configurations using pydantic models.
+  • Model Flexibility & External Integration: Abstract LLM and NLP interactions so that the primary LLM is OpenAI, with additional support from Cohere. Use Weaviate as the vector database for semantic storage and retrieval.
+  • Production–Grade Architecture: Incorporate robust error handling, caching, state management, telemetry, logging, and security practices.
+  • Pedantic Data Validation: Utilize pydantic (or equivalent) for strict type validation and configuration schema enforcement.
+  • Testing & Integration: Create test hooks and endpoints for manual integration testing with Zephyr, ensuring each module is fully testable.
+  • Advanced Design Patterns & Code Quality: Apply advanced patterns (Factory, Singleton, Decorator, Dependency Injection) alongside Facade, Strategy, and Observer to ensure modularity and maintainability.
+  • Security & Best Practices: Ensure input sanitization, secrets management, dependency injection, and clear separation of concerns across modules.
+
+================================================================
+Architectural Diagram (High-Level Overview):
+================================================================
+
+                 +-----------------------------------------------------+
+                 |              CrewAI Orchestrator                    |
+                 |    (Central Coordination & Workflow Management)     |
+                 +----------------------+------------------------------+
+                                        │
+       ┌────────────────────────────────┼────────────────────────────────┐
+       │                                │                                │
++--------------+                +----------------------+        +-----------------------+
+|  Role–Based  |                |  Process Orchestration|        |  Event–Driven Flows    |
+|   Agents     |                |  (Sequential,         |        |  (Python Integration,  |
+| (Collector,  |                |   Hierarchical,       |        |   Conditional Branching|
+|  Analyzer,   |                |   Consensual)         |        |   & State Management)  |
+|  Strategist, |                +----------------------+        +-----------------------+
+|  Manager,    |                          │                                 │
+|  Reporter)   |                +----------------------+        +-----------------------+
++--------------+                |  Flexible Task       |        |   Observer Pattern     |
+       │                        |  Management          |        |  (Event Listeners,     |
+       │                        |  (Modular, Sync/Async)|       |   Real-Time Notifications)|
+       └──────── Delegation & Task Assignment ───────────────────────────────┘
+                                        │
+                                        ▼
+                              +-----------------------+
+                              |  Tool Integration via |
+                              |   Facade Pattern      |
+                              | (Built–in & Custom    |
+                              |  Tools Abstraction)   |
+                              +-----------------------+
+                                        │
+                                        ▼
+                              +-----------------------+
+                              |  Customization Layer  |
+                              | (YAML Configurations  |
+                              |   & Code Overrides)   |
+                              +-----------------------+
+                                        │
+                                        ▼
+                              +-----------------------+
+                              |   Model Flexibility   |
+                              | (OpenAI, Cohere,      |
+                              |  Weaviate Integration)|
+                              +-----------------------+
+                                        │
+                                        ▼
+                              +-----------------------+
+                              | Production–Grade Core |
+                              | (Error Handling,      |
+                              |  Caching, Telemetry,  |
+                              |  Logging, Security)   |
+                              +-----------------------+
+
+================================================================
+Implementation Details & Instructions:
+================================================================
+
+[1] Project Structure & Code Organization:
+    • Create a clear directory layout:
+         /agents         – Base classes and specific agent implementations.
+         /tasks          – Task definitions, TaskManager, and scheduling.
+         /orchestration  – Process orchestration strategies and manager logic.
+         /events         – Event management, Observer pattern implementations.
+         /tools          – Tool integrations, Facade class, and custom tool plugins.
+         /config         – YAML configuration files and config loader utilities.
+         /integrations   – External integrations (OpenAI, Cohere, Weaviate).
+         /telemetry      – Telemetry, logging, and error reporting modules.
+         /tests          – Unit tests and Zephyr integration test hooks.
+    • All code must use type hints, docstrings, and adhere to PEP8 conventions.
+    • Include automated formatting (e.g., using Black) and static analysis (e.g., mypy).
+
+[2] Agent Definitions & Role–Based Design:
+    • Develop a BaseAgent class that all agents extend.
+    • Define specialized agents:
+         - DataCollectorAgent: Gathers data (from web APIs, databases, etc.).
+         - AnalyzerAgent: Processes and analyzes data.
+         - StrategistAgent: Develops strategies and decision trees.
+         - ManagerAgent: Oversees task delegation, error recovery, and crew coordination.
+         - ReporterAgent: Aggregates outputs and generates comprehensive reports.
+    • Each agent class must include:
+         - A unique identifier, role, goal, and backstory.
+         - Methods: execute_task(task), delegate_task(task), update_status(), handle_event(event).
+         - Logging of state changes and events.
+    • Use pydantic to define each agent’s configuration schema:
+
+         from pydantic import BaseModel, Field
+
+         class AgentConfig(BaseModel):
+             name: str = Field(..., description="Unique agent name")
+             role: str = Field(..., description="Agent role e.g., DataCollector, Analyzer")
+             goal: str = Field(..., description="Agent primary goal")
+             backstory: str = Field("", description="Context or backstory of the agent")
+             settings: dict = Field(default_factory=dict, description="Additional runtime settings")
+
+[3] Crew Composition Module:
+    • Create a Crew class that groups agents logically.
+    • Responsibilities include:
+         - Dynamic formation of crews based on task requirements.
+         - Managing crew membership (adding, removing, reassigning agents).
+         - Centralized task distribution among crew members.
+         - Aggregating crew–level events and performance metrics.
+    • Sample structure:
+
+         class Crew:
+             def __init__(self, crew_id: str, agents: list):
+                 self.crew_id = crew_id
+                 self.agents = agents  # List of BaseAgent instances
+                 self.task_history = []
+             
+             def assign_task(self, task):
+                 # Determine best agent(s) based on role, availability, and expertise.
+                 selected_agents = self._select_agents_for_task(task)
+                 for agent in selected_agents:
+                     agent.execute_task(task)
+                 self.task_history.append(task)
+             
+             def _select_agents_for_task(self, task):
+                 # Custom logic for agent selection
+                 return [agent for agent in self.agents if agent.is_available()]
+             
+             def update_crew_status(self):
+                 # Aggregate status from each agent and update crew-level telemetry.
+                 pass
+
+[4] Flexible Task Management:
+    • Define a Task model using pydantic with attributes:
+         - task_id, description, expected_output, execution mode (sync/async), priority, dependencies, timeout, and retry policy.
+    • Develop a TaskManager class that:
+         - Maintains an internal task queue.
+         - Supports concurrent task execution (async/await for asynchronous tasks).
+         - Implements scheduling, retry logic, and dependency resolution.
+         - Logs task start, completion, failure, and retry events.
+    • Example Task model:
+
+         class Task(BaseModel):
+             task_id: str = Field(..., description="Unique identifier for the task")
+             description: str = Field(..., description="Detailed description of the task")
+             expected_output: str = Field(..., description="The desired output")
+             is_async: bool = Field(False, description="Whether task executes asynchronously")
+             priority: int = Field(1, description="Task priority (higher means more urgent)")
+             dependencies: list = Field(default_factory=list, description="List of dependent task_ids")
+             timeout: int = Field(30, description="Maximum execution time in seconds")
+             retry_policy: dict = Field(default_factory=lambda: {"max_retries": 3, "delay": 5}, description="Retry configuration")
+
+[5] Process Orchestration & Execution Strategies:
+    • Implement an abstract ExecutionStrategy class with an execute(tasks, agents) method.
+    • Develop concrete strategies using the Strategy pattern:
+         - SequentialStrategy: Process tasks one by one in order.
+         - HierarchicalStrategy: ManagerAgent oversees task delegation and monitors sub–tasks.
+         - ConsensualStrategy: Agents communicate to agree on task execution order (e.g., using a consensus algorithm).
+    • The ManagerAgent in the HierarchicalStrategy should:
+         - Monitor real–time progress.
+         - Reassign tasks upon failure.
+         - Trigger recovery mechanisms.
+    • Sample Strategy classes:
+
+         from abc import ABC, abstractmethod
+
+         class ExecutionStrategy(ABC):
+             @abstractmethod
+             def execute(self, tasks: list, agents: list):
+                 pass
+
+         class SequentialStrategy(ExecutionStrategy):
+             def execute(self, tasks, agents):
+                 for task in tasks:
+                     for agent in agents:
+                         if agent.can_execute(task):
+                             agent.execute_task(task)
+                             break
+
+         class HierarchicalStrategy(ExecutionStrategy):
+             def execute(self, tasks, agents):
+                 manager = next((agent for agent in agents if agent.role == "Manager"), None)
+                 if not manager:
+                     raise Exception("No ManagerAgent available")
+                 manager.delegate_tasks(tasks)
+
+         class ConsensualStrategy(ExecutionStrategy):
+             def execute(self, tasks, agents):
+                 # Implement consensus algorithm for distributed decision making.
+                 agreed_order = self._reach_consensus(tasks, agents)
+                 for task in agreed_order:
+                     for agent in agents:
+                         if agent.can_execute(task):
+                             agent.execute_task(task)
+                             break
+             
+             def _reach_consensus(self, tasks, agents):
+                 # Dummy consensus: sort tasks by priority, then task_id.
+                 return sorted(tasks, key=lambda t: (t.priority, t.task_id))
+
+[6] Event–Driven Flows & Observer Pattern:
+    • Develop an Event and EventManager class to facilitate a publish/subscribe mechanism.
+    • Define an EventListener interface that agents can implement to handle events.
+    • The EventManager must support:
+         - Subscribing and unsubscribing listeners.
+         - Publishing events (e.g., task completed, error occurred, state update).
+         - Logging and telemetry integration for each event.
+    • Sample implementation:
+
+         class Event:
+             def __init__(self, event_type: str, payload: dict):
+                 self.event_type = event_type
+                 self.payload = payload
+
+         class EventManager:
+             _instance = None
+             
+             def __new__(cls, *args, **kwargs):
+                 if cls._instance is None:
+                     cls._instance = super(EventManager, cls).__new__(cls)
+                     cls._instance.listeners = {}
+                 return cls._instance
+
+             def subscribe(self, event_type: str, listener):
+                 if event_type not in self.listeners:
+                     self.listeners[event_type] = []
+                 self.listeners[event_type].append(listener)
+
+             def unsubscribe(self, event_type: str, listener):
+                 if event_type in self.listeners:
+                     self.listeners[event_type].remove(listener)
+
+             def publish(self, event: Event):
+                 for listener in self.listeners.get(event.event_type, []):
+                     listener.handle_event(event)
+
+         # Each agent should implement a handle_event(event: Event) method.
+
+[7] Tool Integration via Facade & Plugin System:
+    • Create a ToolFacade class that acts as a unified interface for interacting with various tools.
+    • Support built–in tools:
+         - WebScraperTool: For extracting data from websites.
+         - FileReaderTool: For reading and parsing files.
+         - CodeInterpreterTool: For executing and evaluating code snippets.
+    • Allow for custom tool plugins to be dynamically discovered and integrated.
+    • Use the Facade pattern to hide underlying complexities:
+
+         class ToolFacade:
+             def __init__(self):
+                 self.tools = {
+                     'web_scraper': self._init_web_scraper(),
+                     'file_reader': self._init_file_reader(),
+                     'code_interpreter': self._init_code_interpreter()
+                 }
+                 # Dynamically load custom tools from configuration or plugins directory.
+             
+             def _init_web_scraper(self):
+                 return WebScraperTool(timeout=10)
+             
+             def _init_file_reader(self):
+                 return FileReaderTool(encoding="utf-8")
+             
+             def _init_code_interpreter(self):
+                 return CodeInterpreterTool()
+             
+             def execute_tool(self, tool_name: str, *args, **kwargs):
+                 if tool_name in self.tools:
+                     return self.tools[tool_name].execute(*args, **kwargs)
+                 else:
+                     raise ValueError(f"Tool {tool_name} not available.")
+
+[8] Customization & YAML Configuration:
+    • Use YAML files (e.g., config.yaml) to define:
+         - Agent properties (name, role, goal, backstory, settings).
+         - Default task parameters (priority, concurrency limits, retry policies).
+         - Tool configuration (timeouts, encoding, API keys, etc.).
+         - Orchestration settings (execution strategy, crew parameters).
+         - External integrations (OpenAI, Cohere, Weaviate API keys and endpoints).
+    • Write a configuration loader that validates input using pydantic models.
+    • Sample YAML snippet:
+
+         agents:
+           - name: "DataCollector1"
+             role: "DataCollector"
+             goal: "Collect real-time market data"
+             backstory: "Expert in data ingestion from diverse sources."
+             settings:
+               polling_interval: 30
+           - name: "Analyzer1"
+             role: "Analyzer"
+             goal: "Analyze market trends and forecast patterns"
+             backstory: "Proficient in statistical analysis and machine learning."
+         tasks:
+           default_priority: 1
+           max_concurrent_tasks: 5
+           retry_policy:
+             max_retries: 3
+             delay: 5
+         tools:
+           web_scraper:
+             timeout: 10
+           file_reader:
+             encoding: "utf-8"
+         orchestration:
+           execution_strategy: "Hierarchical"
+           crew_formation: "dynamic"
+         integrations:
+           openai:
+             api_key: "YOUR_OPENAI_API_KEY"
+             model: "gpt-4"
+           cohere:
+             api_key: "YOUR_COHERE_API_KEY"
+           weaviate:
+             url: "http://localhost:8080"
+
+    • The loader must support overriding via environment variables and command-line parameters.
+
+[9] External Integrations & Model Flexibility:
+    • Abstract the LLM integration with an LLMInterface that supports:
+         - process_text(text: str) for natural language processing.
+         - generate_response(prompt: str) for text generation.
+         - Use OpenAI as the primary LLM and fallback to Cohere if needed.
+    • Integrate Weaviate as the vector database:
+         - Implement methods for insert, search, update, and delete vectorized representations.
+         - Create a thin abstraction layer to decouple direct API calls.
+    • Example LLMInterface:
+
+         from abc import ABC, abstractmethod
+
+         class LLMInterface(ABC):
+             @abstractmethod
+             def process_text(self, text: str) -> str:
+                 pass
+             
+             @abstractmethod
+             def generate_response(self, prompt: str) -> str:
+                 pass
+
+         class OpenAILLM(LLMInterface):
+             def __init__(self, api_key: str, model: str):
+                 self.api_key = api_key
+                 self.model = model
+             
+             def process_text(self, text: str) -> str:
+                 # Call OpenAI API and return processed text.
+                 pass
+             
+             def generate_response(self, prompt: str) -> str:
+                 # Call OpenAI API and return generated response.
+                 pass
+
+[10] Production–Grade Features:
+    • Error Handling & Recovery:
+         - Implement try/except blocks in all critical sections.
+         - Use centralized logging (e.g., Python’s logging module or loguru).
+         - Integrate with external error reporting services (e.g., Sentry) if applicable.
+         - Implement retry logic based on the task’s retry_policy.
+    • Caching & State Management:
+         - Use in-memory caches (or Redis if needed) to cache repeated external queries.
+         - Each agent must maintain its own state, and a central state manager should aggregate global state.
+    • Telemetry & Monitoring:
+         - Integrate telemetry hooks that record metrics such as task latency, success rate, agent utilization, etc.
+         - Use a monitoring library (e.g., Prometheus client) to expose metrics.
+         - Log events at INFO, DEBUG, and ERROR levels.
+    • Security:
+         - Validate all external inputs using pydantic schemas.
+         - Sanitize user inputs to prevent injection attacks.
+         - Manage secrets (API keys, passwords) securely via environment variables or secure vaults.
+         - Use dependency injection to decouple modules and improve testability.
+
+[11] Testing & Integration with Zephyr:
+    • Create unit tests for each module (agents, task manager, event manager, tool facade) using a testing framework (e.g., pytest).
+    • Develop integration tests that simulate full crew workflows, including error scenarios and task reassignments.
+    • Provide dedicated endpoints or CLI commands for manual testing through Zephyr:
+         - Example: An HTTP endpoint to initiate a sample crew task flow and report results.
+         - Include test cases for both synchronous and asynchronous task execution.
+    • Ensure test coverage is comprehensive and that logs are captured for debugging.
+
+[12] Advanced Design Patterns & Code Quality:
+    • In addition to the already–mentioned patterns (Facade, Strategy, Observer), implement:
+         - Factory Pattern: For dynamic creation of agents and tasks from YAML configurations.
+         - Singleton Pattern: For central managers (e.g., EventManager, ConfigManager) to ensure only one instance exists.
+         - Dependency Injection: To decouple components and facilitate unit testing.
+         - Decorator Pattern: For cross–cutting concerns like logging, caching, and error handling.
+    • Ensure that each module is thoroughly documented with inline comments explaining design choices.
+    • Maintain high code quality with modularity and loose coupling.
+
+================================================================
+Final Deliverable:
+================================================================
+
+The Code Agent must produce a complete, production–ready codebase that:
+  1. Initializes the CrewAI multi–agent system with clearly defined agents, dynamic crew formation, and robust task management.
+  2. Supports multiple orchestration models (sequential, hierarchical, consensual) using Strategy and Observer patterns.
+  3. Provides a unified tool interface via a Facade, with dynamic plugin support.
+  4. Loads configurations from YAML with strict validation using pydantic.
+  5. Integrates external services: OpenAI for LLM tasks, Cohere for additional NLP, and Weaviate for vector storage.
+  6. Implements production–grade features: error handling, caching, state management, telemetry, logging, and security.
+  7. Contains comprehensive unit and integration tests, with manual testing hooks for Zephyr.
+  8. Follows advanced design patterns (Factory, Singleton, Decorator, Dependency Injection) and best practices.
+  9. Is fully documented with inline comments, external documentation (README, Sphinx docs), and an embedded architectural diagram.
+
+================================================================
+Instructions to the Code Agent:
+================================================================
+
+1. Set up the project directory structure as outlined.
+2. Create and validate pydantic models for agent configurations, tasks, events, and tool settings.
+3. Develop the BaseAgent and specialized agent classes with methods for task execution, delegation, and event handling.
+4. Build the Crew module with dynamic agent selection and task assignment logic.
+5. Implement the TaskManager with support for asynchronous execution, scheduling, and retry logic.
+6. Develop the ExecutionStrategy abstract class and concrete strategies (Sequential, Hierarchical, Consensual).
+7. Implement the EventManager and Observer pattern to support event–driven flows.
+8. Develop the ToolFacade with built–in tool integrations and dynamic custom tool loading.
+9. Write YAML configuration loaders with support for environment variable overrides and runtime validation.
+10. Abstract external integrations behind unified interfaces for OpenAI, Cohere, and Weaviate.
+11. Integrate production features including robust error handling, caching, state management, telemetry, logging, and security.
+12. Create comprehensive unit and integration tests; include endpoints/CLI hooks for Zephyr testing.
+13. Ensure code adheres to advanced design patterns (Factory, Singleton, Decorator, Dependency Injection) and is thoroughly documented.
+
+================================================================
+End of Ultimate Comprehensive Prompt.
+================================================================
+"""
+
+# Note: The Code Agent is expected to generate a complete, production–ready code repository based on the above specifications.
