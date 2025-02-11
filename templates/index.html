@@ -76,7 +76,7 @@
           </button>
         </form>
 
-        <!-- Enhanced Test Case Result Display -->
+        <!-- Test Case Result Display -->
         <div id="result" class="mt-8 hidden">
           <h3 class="text-xl font-bold mb-4">Generated Test Case:</h3>
           <div class="bg-gray-50 p-6 rounded-lg">
@@ -329,41 +329,47 @@
         body: JSON.stringify({ requirement })
       });
 
-      const result = await response.json();
+      const data = await response.json();
+
+      if (data.status === 'error') {
+        throw new Error(data.message || 'Failed to generate test case');
+      }
+
+      const testCase = data.test_case;
 
       // Show result section
       document.getElementById('result').classList.remove('hidden');
 
       // Update test case details
-      const testCase = result.test_case;
-      document.getElementById('testCaseTitle').textContent = testCase.title;
-      document.getElementById('testCaseDescription').textContent = testCase.description;
+      document.getElementById('testCaseTitle').textContent = testCase.title || '';
+      document.getElementById('testCaseDescription').textContent = testCase.description || '';
 
-      // Update prerequisites
+      // Update prerequisites (given)
       const prerequisitesList = document.getElementById('testCasePrerequisites');
-      prerequisitesList.innerHTML = testCase.prerequisites
+      prerequisitesList.innerHTML = (testCase.format?.given || [])
         .map(prereq => `<li>${prereq}</li>`)
         .join('');
 
-      // Update steps
+      // Update steps (when)
       const stepsList = document.getElementById('testCaseSteps');
-      stepsList.innerHTML = testCase.steps
+      stepsList.innerHTML = (testCase.format?.when || [])
         .map(step => `<li>${step}</li>`)
         .join('');
 
-      // Update expected results
+      // Update expected results (then)
       const resultsList = document.getElementById('testCaseExpectedResults');
-      resultsList.innerHTML = testCase.expected_results
+      resultsList.innerHTML = (testCase.format?.then || [])
         .map(result => `<li>${result}</li>`)
         .join('');
 
       // Update tags
       const tagsContainer = document.getElementById('testCaseTags');
-      tagsContainer.innerHTML = testCase.tags
+      tagsContainer.innerHTML = (testCase.format?.tags || [])
         .map(tag => `<span class="px-2 py-1 bg-gray-200 rounded-full text-sm">${tag}</span>`)
         .join('');
 
     } catch (error) {
+      console.error('Error:', error);
       alert('Error generating test case: ' + error.message);
     }
   });

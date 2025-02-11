@@ -50,49 +50,45 @@ class TestCaseMappingAgent(BaseAgent):
                 raise ValueError("Requirement data is required")
 
             # Generate a structured test case
-            title = f"Test: {requirement[:50]}"
-            description = requirement
-
             test_case = TestCaseOutput(
-                title=title,
-                description=description,
+                title=f"Test: {requirement[:50]}",
+                description=requirement,
                 format=TestCaseFormat(
                     given=[
-                        "System is in a testable state",
-                        "User has appropriate permissions",
-                        "Test environment is properly configured"
+                        "User has valid credentials",
+                        "System is accessible",
+                        "Required permissions are granted"
                     ],
                     when=[
-                        "User performs the required actions",
-                        "System processes the request",
-                        "All necessary validations are executed"
+                        "User submits test requirement",
+                        "System processes the input",
+                        "Test case is generated"
                     ],
                     then=[
-                        "Expected outcome is achieved",
-                        "System state is properly updated",
-                        "User receives appropriate feedback"
+                        "Test case is created successfully",
+                        "All required fields are populated",
+                        "Test case is stored in the system"
                     ],
-                    tags=["automated", "functional", "regression"],
+                    tags=["automated", "functional", "generated"],
                     priority="high"
                 ),
                 metadata={
                     "source": "requirement",
-                    "created_at": "2025-02-11",
+                    "created_at": task.get('timestamp', "2025-02-11"),
                     "version": "1.0"
                 }
             )
 
-            # Convert to dict for JSON serialization
+            # Convert to dict and structure the response
             test_case_dict = test_case.model_dump()
 
-            result = {
+            # Log successful generation
+            logging.info(f"Generated test case: {test_case_dict['title']}")
+
+            return {
                 "status": "success",
                 "test_case": test_case_dict
             }
-
-            self.generated_cases.append(result)
-            logging.info(f"Successfully generated test case: {title}")
-            return result
 
         except Exception as e:
             logging.error(f"Error generating test case: {str(e)}")
@@ -103,6 +99,6 @@ class TestCaseMappingAgent(BaseAgent):
         status = super().update_status()
         status.update({
             "test_cases_generated": len(self.generated_cases),
-            "last_generated": self.generated_cases[-1] if self.generated_cases else None
+            "last_test_case": self.generated_cases[-1] if self.generated_cases else None
         })
         return status
