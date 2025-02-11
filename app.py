@@ -1,6 +1,7 @@
 import os
 import logging
 from flask import Flask, render_template, request, jsonify
+from testai.agents.manual_test_agent import ManualTestAgent, TestCase
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -32,7 +33,7 @@ def analyze_code():
             return jsonify({'error': 'Code is required'}), 400
 
         #analysis_result = cursor_ai.analyze_code(code) #Removed because cursor_ai is not defined in edited code
-        #Returning a placeholder for now.  Replace with actual analysis logic if needed.
+        #Returning a placeholder for now. Replace with actual analysis logic if needed.
         return jsonify({'analysis': 'Analysis result placeholder'}) 
     except Exception as e:
         logger.error(f"Error in code analysis: {str(e)}")
@@ -55,41 +56,28 @@ def auth():
 
 @app.route('/api/test-cases', methods=['POST'])
 def create_test_case():
+    """Create a test case using the ManualTestAgent"""
     try:
         data = request.json
         requirement = data.get('requirement')
         if not requirement:
             return jsonify({"error": "No requirement provided"}), 400
 
-        # Create a sample test case since we can't use async in Flask directly
-        from testai.agents.manual_test_agent import TestCase #moved import here to avoid circular dependency
-        test_case = TestCase(
-            title="Login Functionality Test",
-            description="Verify user can successfully log in to the application",
-            steps=[
-                "Navigate to login page",
-                "Enter valid credentials",
-                "Click login button"
-            ],
-            expected_results=[
-                "Login page loads successfully",
-                "Input fields accept the credentials",
-                "User is redirected to dashboard"
-            ],
-            prerequisites=["Valid user account exists"],
-            tags=["authentication", "login", "user-access"]
-        )
+        # Create an instance of ManualTestAgent
+        agent = ManualTestAgent()
 
-        return jsonify({
-            'test_case': {
-                'title': test_case.title,
-                'description': test_case.description,
-                'steps': test_case.steps,
-                'expected_results': test_case.expected_results,
-                'prerequisites': test_case.prerequisites,
-                'tags': test_case.tags
-            }
-        })
+        # Prepare the task for the agent
+        task = {
+            'requirement': requirement,
+            'timestamp': data.get('timestamp')
+        }
+
+        # Execute the task and get the result
+        result = agent.execute_task(task)
+
+        logger.info(f"Generated test case for requirement: {requirement[:100]}...")
+        return jsonify(result)
+
     except Exception as e:
         logger.error(f"Error creating test case: {str(e)}")
         return jsonify({'error': str(e)}), 500
