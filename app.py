@@ -38,61 +38,33 @@ def create_test_case():
         if not requirement:
             return jsonify({"error": "No requirement provided"}), 400
 
-        # Step 1: Process requirement
-        requirement_crew = Crew(
-            agents=[requirement_input_agent],
-            tasks=[
-                Task(
-                    description=f"Process and validate this requirement: {requirement}",
-                    agent=requirement_input_agent
-                )
-            ],
-            verbose=True
-        )
-        processed_req = requirement_crew.kickoff()
+        # Step 1: Process requirement using RequirementInputAgent
+        processed_req = requirement  # For now, pass through the requirement directly
 
-        # Step 2: Generate test case
-        mapping_crew = Crew(
-            agents=[test_case_mapping_agent],
-            tasks=[
-                Task(
-                    description=f"Generate test case from processed requirement",
-                    agent=test_case_mapping_agent,
-                    context={"processed_requirement": processed_req}
-                )
-            ],
-            verbose=True
-        )
-        test_case = mapping_crew.kickoff()
+        # Step 2: Generate test case using TestCaseMappingAgent
+        test_case_result = test_case_mapping_agent.execute_task({
+            "requirement": processed_req,
+            "timestamp": "2025-02-11"
+        })
 
-        # Step 3: Validate test case
-        validation_crew = Crew(
-            agents=[validation_agent],
-            tasks=[
-                Task(
-                    description="Validate generated test case",
-                    agent=validation_agent,
-                    context={"test_case": test_case}
-                )
-            ],
-            verbose=True
-        )
-        validation_result = validation_crew.kickoff()
+        if not test_case_result or "test_case" not in test_case_result:
+            return jsonify({
+                "status": "error",
+                "message": "Failed to generate test case"
+            }), 500
+
+        test_case = test_case_result["test_case"]
+
+        # Step 3: Validate the generated test case
+        validation_result = validation_agent.execute_task({
+            "test_case": test_case
+        })
 
         if validation_result.get("is_valid", False):
             # Step 4: Store test case
-            storage_crew = Crew(
-                agents=[storage_agent],
-                tasks=[
-                    Task(
-                        description="Store validated test case",
-                        agent=storage_agent,
-                        context={"test_case": test_case}
-                    )
-                ],
-                verbose=True
-            )
-            storage_result = storage_crew.kickoff()
+            storage_result = storage_agent.execute_task({
+                "test_case": test_case
+            })
 
             return jsonify({
                 "status": "success",
