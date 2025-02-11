@@ -1,6 +1,8 @@
 """TestCaseMappingAgent implementation for generating formatted test cases."""
 from typing import Dict, List, Optional, Any
 import logging
+import os
+import requests
 from pydantic import BaseModel
 
 from .base_agent import BaseAgent, AgentConfig
@@ -34,6 +36,9 @@ class TestCaseMappingAgent(BaseAgent):
         )
         super().__init__(config)
         self.generated_cases = []
+        self.zephyr_api_key = os.environ.get("ZEPHYR_API_KEY")
+        self.zephyr_project_key = os.environ.get("ZEPHYR_PROJECT_KEY")
+        self.zephyr_base_url = "https://api.zephyrscale.smartbear.com/v2"
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a test case mapping task
@@ -59,6 +64,13 @@ class TestCaseMappingAgent(BaseAgent):
             # Convert to dict and structure the response
             test_case_dict = test_case.model_dump()
 
+            # Store in Zephyr Scale
+            zephyr_result = self._store_in_zephyr(test_case_dict)
+            if zephyr_result:
+                logging.info(f"Test case successfully stored in Zephyr Scale: {test_case_dict['title']}")
+            else:
+                logging.warning(f"Failed to store test case in Zephyr Scale: {test_case_dict['title']}")
+
             # Log successful generation
             logging.info(f"Generated test case: {test_case_dict['title']}")
 
@@ -72,6 +84,68 @@ class TestCaseMappingAgent(BaseAgent):
         except Exception as e:
             logging.error(f"Error generating test case: {str(e)}")
             raise
+
+    def _store_in_zephyr(self, test_case: Dict[str, Any]) -> bool:
+        """Store test case in Zephyr Scale
+
+        Args:
+            test_case: Test case data to store
+
+        Returns:
+            bool indicating success
+        """
+        if not self.zephyr_api_key or not self.zephyr_project_key:
+            logging.warning("Zephyr Scale credentials not configured")
+            return False
+
+        try:
+            # Format test case for Zephyr Scale
+            zephyr_test_case = {
+                "projectKey": self.zephyr_project_key,
+                "name": test_case["title"],
+                "objective": test_case["description"],
+                "precondition": "\n".join(test_case["format"]["given"]),
+                "priority": test_case["format"]["priority"].upper(),
+                "status": "Draft",
+                "steps": [
+                    {
+                        "description": step,
+                        "expectedResult": then_step,
+                        "testData": ""
+                    }
+                    for step, then_step in zip(
+                        test_case["format"]["when"],
+                        test_case["format"]["then"]
+                    )
+                ]
+            }
+
+            # Add labels if tags exist
+            if test_case["format"].get("tags"):
+                zephyr_test_case["labels"] = test_case["format"]["tags"]
+
+            # Make API request to create test case
+            headers = {
+                "Authorization": f"Bearer {self.zephyr_api_key}",
+                "Content-Type": "application/json"
+            }
+
+            response = requests.post(
+                f"{self.zephyr_base_url}/testcases",
+                headers=headers,
+                json=zephyr_test_case
+            )
+
+            if response.status_code in (200, 201):
+                logging.info(f"Test case created in Zephyr Scale with ID: {response.json().get('id')}")
+                return True
+            else:
+                logging.error(f"Failed to create test case in Zephyr Scale: {response.text}")
+                return False
+
+        except Exception as e:
+            logging.error(f"Error storing in Zephyr Scale: {str(e)}")
+            return False
 
     def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
         """Generate a login-specific test case"""
@@ -135,14 +209,6 @@ class TestCaseMappingAgent(BaseAgent):
                 "requirement_text": requirement
             }
         )
-
-    def _store_in_zephyr(self, test_case: Dict[str, Any]) -> None:
-        """Store test case in Zephyr Scale (mock implementation)"""
-        try:
-            # Mock Zephyr Scale storage for now
-            logging.info(f"Test case would be stored in Zephyr Scale: {test_case['title']}")
-        except Exception as e:
-            logging.error(f"Error storing in Zephyr Scale: {str(e)}")
 
     def update_status(self) -> Dict[str, Any]:
         """Update and return the current status of the agent"""
