@@ -66,7 +66,11 @@ class TestCaseMappingAgent(BaseAgent):
                 "name": test_case["title"],
                 "objective": test_case["description"],
                 "priorityName": test_case["format"]["priority"].upper(),
-                "statusName": "Draft"
+                "statusName": "Draft",
+                # Add required custom field
+                "customFields": {
+                    "Automation": "Not Automated"
+                }
             }
 
             # Add preconditions (Given)
