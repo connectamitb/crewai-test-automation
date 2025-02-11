@@ -2,7 +2,6 @@
 from typing import Dict, List, Optional, Any
 import logging
 from pydantic import BaseModel
-from crewai import Task
 
 from .base_agent import BaseAgent, AgentConfig
 
@@ -27,6 +26,32 @@ class ManualTestAgent(BaseAgent):
             verbose=True
         )
         super().__init__(config)
+
+    def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a test case creation task
+
+        Args:
+            task: Task containing test requirement details
+
+        Returns:
+            Dict containing the generated test case
+        """
+        requirement = task.get('requirement', '')
+        if not requirement:
+            raise ValueError("Test requirement is required")
+
+        try:
+            self.logger.info(f"Generating test case for requirement: {requirement[:100]}...")
+
+            # Process the requirement and generate test case
+            result = self._process_task(task)
+
+            self.logger.info(f"Successfully generated test case: {result['test_case']['title']}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error in test case generation: {str(e)}")
+            raise
 
     def _process_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Process a test case creation task
