@@ -95,34 +95,41 @@ class TestCaseMappingAgent(BaseAgent):
             bool indicating success
         """
         if not self.zephyr_api_key or not self.zephyr_project_key:
-            logging.warning("Zephyr Scale credentials not configured")
+            logging.error("Zephyr Scale credentials not configured. ZEPHYR_API_KEY and ZEPHYR_PROJECT_KEY are required.")
             return False
 
         try:
+            logging.info(f"Preparing to store test case in Zephyr Scale: {test_case['title']}")
+
             # Format test case for Zephyr Scale
             zephyr_test_case = {
                 "projectKey": self.zephyr_project_key,
                 "name": test_case["title"],
                 "objective": test_case["description"],
                 "precondition": "\n".join(test_case["format"]["given"]),
-                "priority": test_case["format"]["priority"].upper(),
-                "status": "Draft",
-                "steps": [
-                    {
-                        "description": step,
-                        "expectedResult": then_step,
-                        "testData": ""
-                    }
-                    for step, then_step in zip(
-                        test_case["format"]["when"],
-                        test_case["format"]["then"]
-                    )
-                ]
+                "priorityName": test_case["format"]["priority"].upper(),
+                "statusName": "Draft",
+                "testScript": {
+                    "type": "plain",
+                    "steps": [
+                        {
+                            "step": step,
+                            "result": then_step,
+                            "data": ""
+                        }
+                        for step, then_step in zip(
+                            test_case["format"]["when"],
+                            test_case["format"]["then"]
+                        )
+                    ]
+                }
             }
 
             # Add labels if tags exist
             if test_case["format"].get("tags"):
                 zephyr_test_case["labels"] = test_case["format"]["tags"]
+
+            logging.info(f"Formatted test case for Zephyr Scale: {zephyr_test_case}")
 
             # Make API request to create test case
             headers = {
@@ -130,21 +137,27 @@ class TestCaseMappingAgent(BaseAgent):
                 "Content-Type": "application/json"
             }
 
+            logging.info("Making request to Zephyr Scale API...")
             response = requests.post(
                 f"{self.zephyr_base_url}/testcases",
                 headers=headers,
                 json=zephyr_test_case
             )
 
+            logging.info(f"Zephyr Scale API response status: {response.status_code}")
+            logging.info(f"Zephyr Scale API response body: {response.text}")
+
             if response.status_code in (200, 201):
-                logging.info(f"Test case created in Zephyr Scale with ID: {response.json().get('id')}")
+                test_case_id = response.json().get('id', 'unknown')
+                logging.info(f"Test case successfully created in Zephyr Scale with ID: {test_case_id}")
                 return True
             else:
-                logging.error(f"Failed to create test case in Zephyr Scale: {response.text}")
+                logging.error(f"Failed to create test case in Zephyr Scale. Status code: {response.status_code}")
+                logging.error(f"Error response: {response.text}")
                 return False
 
         except Exception as e:
-            logging.error(f"Error storing in Zephyr Scale: {str(e)}")
+            logging.error(f"Error storing test case in Zephyr Scale: {str(e)}")
             return False
 
     def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
