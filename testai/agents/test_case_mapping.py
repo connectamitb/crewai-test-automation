@@ -137,9 +137,9 @@ class TestCaseMappingAgent(BaseAgent):
             # Log the request details
             logging.info(f"Sending request to Zephyr Scale with data: {json.dumps(zephyr_test_case, indent=2)}")
 
-            # Prepare headers
+            # Prepare headers - Using API key directly without "Bearer"
             headers = {
-                "Authorization": f"Bearer {self.zephyr_api_key}",
+                "Authorization": self.zephyr_api_key,
                 "Content-Type": "application/json"
             }
 
