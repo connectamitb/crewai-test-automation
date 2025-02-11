@@ -49,33 +49,39 @@ class TestCaseMappingAgent(BaseAgent):
             if not requirement:
                 raise ValueError("Requirement data is required")
 
-            # Generate a structured test case
+            # Analyze the requirement text
+            words = requirement.lower().split()
+            action_words = ["login", "access", "create", "update", "delete", "view"]
+            action = next((word for word in words if word in action_words), "perform action")
+
+            # Generate a more specific test case based on the requirement
             test_case = TestCaseOutput(
-                title=f"Test: {requirement[:50]}",
+                title=f"Test: {action.capitalize()} Functionality",
                 description=requirement,
                 format=TestCaseFormat(
                     given=[
-                        "User has valid credentials",
-                        "System is accessible",
-                        "Required permissions are granted"
+                        "User is on the required page",
+                        "System is in a known good state",
+                        "Required test data is available"
                     ],
                     when=[
-                        "User submits test requirement",
-                        "System processes the input",
-                        "Test case is generated"
+                        f"User initiates the {action} operation",
+                        "User provides all required inputs",
+                        "User submits the request"
                     ],
                     then=[
-                        "Test case is created successfully",
-                        "All required fields are populated",
-                        "Test case is stored in the system"
+                        "Operation completes successfully",
+                        "System displays appropriate success message",
+                        "Data is properly persisted"
                     ],
-                    tags=["automated", "functional", "generated"],
+                    tags=["automated", "functional", "regression", action],
                     priority="high"
                 ),
                 metadata={
                     "source": "requirement",
                     "created_at": task.get('timestamp', "2025-02-11"),
-                    "version": "1.0"
+                    "version": "1.0",
+                    "requirement_text": requirement
                 }
             )
 
@@ -84,6 +90,8 @@ class TestCaseMappingAgent(BaseAgent):
 
             # Log successful generation
             logging.info(f"Generated test case: {test_case_dict['title']}")
+
+            self.generated_cases.append(test_case_dict)
 
             return {
                 "status": "success",
