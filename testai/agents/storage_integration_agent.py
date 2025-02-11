@@ -2,6 +2,7 @@
 from typing import Dict, List, Any
 import logging
 from .base_agent import BaseAgent, AgentConfig
+from integrations.weaviate_integration import WeaviateIntegration, TestCase
 
 class StorageIntegrationAgent(BaseAgent):
     """Agent responsible for storing test cases in multiple backends"""
@@ -17,6 +18,8 @@ class StorageIntegrationAgent(BaseAgent):
         )
         super().__init__(config)
         self.stored_cases = []
+        self.weaviate = WeaviateIntegration()
+        self.logger = logging.getLogger(__name__)
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a storage task
@@ -42,22 +45,38 @@ class StorageIntegrationAgent(BaseAgent):
             if not self._validate_test_case(test_case):
                 raise ValueError("Invalid test case format")
 
-            self.logger.info(f"Storing test case: {test_case.get('title', 'Untitled')}")
+            self.logger.info(f"Storing test case: {test_case.get('name', 'Untitled')}")
 
-            # Store test case locally
+            # Convert to TestCase model
+            weaviate_test_case = TestCase(
+                name=test_case.get("title", ""),
+                objective=test_case.get("description", ""),
+                precondition=test_case.get("precondition", "None"),
+                automation_needed=test_case.get("automation_needed", "TBD"),
+                steps=[{
+                    "step": step.get("action", ""),
+                    "test_data": step.get("test_data", ""),
+                    "expected_result": step.get("expected_result", "")
+                } for step in test_case.get("steps", [])]
+            )
+
+            # Store in Weaviate
+            weaviate_id = self.weaviate.store_test_case(weaviate_test_case)
+
+            # Store locally as backup
             stored_case = {
-                "title": test_case.get("title", ""),
-                "description": test_case.get("description", ""),
-                "steps": test_case.get("steps", []),
-                "expected_results": test_case.get("expected_results", []),
-                "metadata": test_case.get("metadata", {})
+                "weaviate_id": weaviate_id,
+                "name": weaviate_test_case.name,
+                "objective": weaviate_test_case.objective,
+                "steps": weaviate_test_case.steps
             }
 
             self.stored_cases.append(stored_case)
 
             return {
                 "status": "success",
-                "stored_case": stored_case
+                "stored_case": stored_case,
+                "weaviate_id": weaviate_id
             }
 
         except Exception as e:

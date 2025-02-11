@@ -1,6 +1,7 @@
 """Test suite for StorageIntegrationAgent."""
 import pytest
 from testai.agents.storage_integration_agent import StorageIntegrationAgent
+from integrations.weaviate_integration import TestCase
 
 def test_storage_integration_agent_initialization():
     """Test StorageIntegrationAgent initialization"""
@@ -8,6 +9,7 @@ def test_storage_integration_agent_initialization():
     assert agent.config.agent_id == "storage_integration_001"
     assert agent.config.role == "Storage Integration Manager"
     assert isinstance(agent.stored_cases, list)
+    assert agent.weaviate is not None
 
 def test_basic_storage():
     """Test basic test case storage"""
@@ -15,16 +17,28 @@ def test_basic_storage():
     test_case = {
         "title": "Test Login Feature",
         "description": "Verify user login functionality",
-        "steps": ["Navigate to login page", "Enter credentials"],
-        "expected_results": ["Page loads successfully", "User is logged in"],
-        "metadata": {"priority": "High"}
+        "precondition": "User exists in the system",
+        "automation_needed": "Yes",
+        "steps": [
+            {
+                "action": "Navigate to login page",
+                "test_data": "URL: /login",
+                "expected_result": "Login page loads successfully"
+            },
+            {
+                "action": "Enter credentials",
+                "test_data": "username=test@example.com, password=testpass",
+                "expected_result": "User is logged in"
+            }
+        ]
     }
 
     result = agent.execute_task({"test_case": test_case})
 
     assert result["status"] == "success"
-    assert result["stored_case"]["title"] == test_case["title"]
+    assert "weaviate_id" in result
     assert len(agent.stored_cases) == 1
+    assert agent.stored_cases[0]["name"] == "Test Login Feature"
 
 def test_invalid_test_case():
     """Test handling of invalid test cases"""
@@ -52,14 +66,21 @@ def test_event_handling():
         "test_case": {
             "title": "Event Test Case",
             "description": "Test case from event",
-            "steps": ["Step 1"],
-            "expected_results": ["Result 1"]
+            "precondition": "System is running",
+            "automation_needed": "Yes",
+            "steps": [
+                {
+                    "action": "Step 1",
+                    "test_data": "Test data 1",
+                    "expected_result": "Result 1"
+                }
+            ]
         }
     }
     agent.handle_event(test_case_event)
 
     assert len(agent.stored_cases) > 0
-    assert "Event Test Case" == agent.stored_cases[-1]["title"]
+    assert "Event Test Case" == agent.stored_cases[-1]["name"]
 
     # Test status update
     status = agent.update_status()
