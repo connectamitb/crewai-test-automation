@@ -14,7 +14,7 @@ class TestCaseFormat(BaseModel):
     when: List[str]
     then: List[str]
     tags: Optional[List[str]] = None
-    priority: str = "Medium Priority"  # Updated default priority
+    priority: str = "Medium"  # Updated to use standard priority
 
 class TestCaseOutput(BaseModel):
     """Model for complete test case output"""
@@ -65,7 +65,7 @@ class TestCaseMappingAgent(BaseAgent):
                 "projectKey": self.zephyr_project_key,
                 "name": test_case["title"],
                 "objective": test_case["description"],
-                "priorityName": "Medium Priority",  # Changed from "MEDIUM" to "Medium Priority"
+                "priorityName": "Medium",  # Changed to simple "Medium"
                 "statusName": "Draft",
                 # Add required custom field
                 "customFields": {
