@@ -3,6 +3,10 @@ import logging
 from flask import Flask, render_template, request, jsonify
 from crewai import Agent, Task, Crew, Process
 from dotenv import load_dotenv
+from testai.agents.requirement_input import RequirementInputAgent
+from testai.agents.test_case_mapping import TestCaseMappingAgent
+from testai.agents.validation_agent import ValidationAgent
+from testai.agents.storage_integration_agent import StorageIntegrationAgent
 
 # Load environment variables
 load_dotenv()
@@ -15,29 +19,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_key")
 
 # Initialize CrewAI agents
-test_requirement_agent = Agent(
-    name="RequirementAnalyzer",
-    role="Test Requirement Analyst",
-    goal="Analyze and validate test requirements",
-    backstory="Expert in breaking down testing requirements into actionable test cases",
-    verbose=True
-)
-
-test_case_agent = Agent(
-    name="TestCaseDesigner",
-    role="Test Case Designer",
-    goal="Create comprehensive test cases from requirements",
-    backstory="Expert in test case design and automation",
-    verbose=True
-)
-
-test_execution_agent = Agent(
-    name="TestExecutor",
-    role="Test Execution Specialist",
-    goal="Execute and validate test cases",
-    backstory="Expert in test execution and validation",
-    verbose=True
-)
+requirement_input_agent = RequirementInputAgent()
+test_case_mapping_agent = TestCaseMappingAgent()
+validation_agent = ValidationAgent()
+storage_agent = StorageIntegrationAgent()
 
 @app.route('/')
 def index():
@@ -53,46 +38,80 @@ def create_test_case():
         if not requirement:
             return jsonify({"error": "No requirement provided"}), 400
 
-        # Create a crew of agents for processing the requirement
-        crew = Crew(
-            agents=[test_requirement_agent, test_case_agent, test_execution_agent],
+        # Step 1: Process requirement
+        requirement_crew = Crew(
+            agents=[requirement_input_agent],
             tasks=[
                 Task(
-                    description=f"Analyze this test requirement: {requirement}",
-                    agent=test_requirement_agent
-                ),
-                Task(
-                    description="Generate detailed test cases based on the analysis",
-                    agent=test_case_agent
+                    description=f"Process and validate this requirement: {requirement}",
+                    agent=requirement_input_agent
                 )
             ],
             verbose=True
         )
+        processed_req = requirement_crew.kickoff()
 
-        # Execute the crew tasks
-        result = crew.kickoff()
-
-        # Transform the result into a test case format
-        test_case = {
-            "title": f"Test Case for: {requirement[:50]}...",
-            "description": requirement,
-            "steps": [
-                "Navigate to the target functionality",
-                "Set up test preconditions",
-                "Execute test actions",
-                "Verify expected results"
+        # Step 2: Generate test case
+        mapping_crew = Crew(
+            agents=[test_case_mapping_agent],
+            tasks=[
+                Task(
+                    description=f"Generate test case from processed requirement",
+                    agent=test_case_mapping_agent,
+                    context={"processed_requirement": processed_req}
+                )
             ],
-            "expected_results": [
-                "System responds as expected",
-                "All validation rules are enforced",
-                "Data is correctly processed"
-            ],
-            "prerequisites": ["System is accessible", "User has required permissions"],
-            "tags": ["automated", "functional", "regression"]
-        }
+            verbose=True
+        )
+        test_case = mapping_crew.kickoff()
 
-        logger.info(f"Generated test case for requirement: {requirement[:100]}...")
-        return jsonify({"status": "success", "test_case": test_case})
+        # Step 3: Validate test case
+        validation_crew = Crew(
+            agents=[validation_agent],
+            tasks=[
+                Task(
+                    description="Validate generated test case",
+                    agent=validation_agent,
+                    context={"test_case": test_case}
+                )
+            ],
+            verbose=True
+        )
+        validation_result = validation_crew.kickoff()
+
+        if validation_result.get("is_valid", False):
+            # Step 4: Store test case
+            storage_crew = Crew(
+                agents=[storage_agent],
+                tasks=[
+                    Task(
+                        description="Store validated test case",
+                        agent=storage_agent,
+                        context={"test_case": test_case}
+                    )
+                ],
+                verbose=True
+            )
+            storage_result = storage_crew.kickoff()
+
+            return jsonify({
+                "status": "success",
+                "test_case": {
+                    "title": test_case.get("title", ""),
+                    "description": test_case.get("description", ""),
+                    "prerequisites": test_case.get("format", {}).get("given", []),
+                    "steps": test_case.get("format", {}).get("when", []),
+                    "expected_results": test_case.get("format", {}).get("then", []),
+                    "tags": test_case.get("format", {}).get("tags", []),
+                    "storage_info": storage_result
+                }
+            })
+        else:
+            return jsonify({
+                "status": "error",
+                "message": "Test case validation failed",
+                "validation_errors": validation_result.get("warnings", [])
+            }), 400
 
     except Exception as e:
         logger.error(f"Error creating test case: {str(e)}")
@@ -108,11 +127,11 @@ def analyze_code():
 
         analysis_task = Task(
             description=f"Analyze this code for test cases: {code}",
-            agent=test_requirement_agent
+            agent=requirement_input_agent
         )
 
         crew = Crew(
-            agents=[test_requirement_agent],
+            agents=[requirement_input_agent],
             tasks=[analysis_task],
             process=Process.sequential
         )
@@ -138,7 +157,6 @@ def auth():
     except Exception as e:
         logger.error(f"Authentication error: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 400
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
