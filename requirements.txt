@@ -75,3 +75,4 @@ openai
 crewai
 flask
 python-dotenv
+weaviate-client

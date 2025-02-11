@@ -7,6 +7,8 @@ from testai.agents.requirement_input import RequirementInputAgent
 from testai.agents.test_case_mapping import TestCaseMappingAgent
 from testai.agents.validation_agent import ValidationAgent
 from testai.agents.storage_integration_agent import StorageIntegrationAgent
+import weaviate
+from weaviate.util import generate_uuid5
 
 # Load environment variables
 load_dotenv()
@@ -17,6 +19,31 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_key")
+
+# Initialize Weaviate client with v4 API
+try:
+    weaviate_client = weaviate.WeaviateClient(
+        connection_params=weaviate.connect.ConnectionParams.from_url(
+            url="http://localhost:8080",
+            grpc_port=50051
+        )
+    )
+
+    # Create TestCase class in Weaviate if it doesn't exist
+    class_obj = {
+        "class": "TestCase",
+        "properties": [
+            {"name": "title", "dataType": ["text"]},
+            {"name": "description", "dataType": ["text"]},
+            {"name": "steps", "dataType": ["object"]},
+            {"name": "tags", "dataType": ["text[]"]},
+            {"name": "metadata", "dataType": ["object"]}
+        ],
+        "vectorizer": "text2vec-contextionary"
+    }
+    weaviate_client.schema.create_class(class_obj)
+except Exception as e:
+    logger.warning(f"Weaviate initialization warning: {str(e)}")
 
 # Initialize CrewAI agents
 requirement_input_agent = RequirementInputAgent()
@@ -60,75 +87,46 @@ def create_test_case():
             "test_case": test_case
         })
 
-        if validation_result.get("is_valid", False):
-            # Step 4: Store test case
-            storage_result = storage_agent.execute_task({
-                "test_case": test_case
-            })
-
-            return jsonify({
-                "status": "success",
-                "test_case": {
-                    "title": test_case.get("title", ""),
-                    "description": test_case.get("description", ""),
-                    "prerequisites": test_case.get("format", {}).get("given", []),
-                    "steps": test_case.get("format", {}).get("when", []),
-                    "expected_results": test_case.get("format", {}).get("then", []),
-                    "tags": test_case.get("format", {}).get("tags", []),
-                    "storage_info": storage_result
-                }
-            })
-        else:
+        if not validation_result.get("is_valid", False):
             return jsonify({
                 "status": "error",
                 "message": "Test case validation failed",
-                "validation_errors": validation_result.get("warnings", [])
+                "validation_errors": validation_result.get("suggestions", [])
             }), 400
+
+        # Step 4: Store test case in Weaviate
+        try:
+            if 'weaviate_client' in globals():
+                uuid = generate_uuid5(test_case["title"])
+                properties = {
+                    "title": test_case["title"],
+                    "description": test_case["description"],
+                    "steps": {
+                        "given": test_case["format"]["given"],
+                        "when": test_case["format"]["when"],
+                        "then": test_case["format"]["then"]
+                    },
+                    "tags": test_case["format"]["tags"],
+                    "metadata": test_case["metadata"]
+                }
+                weaviate_client.data.create(
+                    uuid=uuid,
+                    class_name="TestCase",
+                    properties=properties
+                )
+                logger.info(f"Test case stored in Weaviate with UUID: {uuid}")
+        except Exception as e:
+            logger.error(f"Error storing in Weaviate: {str(e)}")
+
+        # Return the complete test case structure
+        return jsonify({
+            "status": "success",
+            "test_case": test_case
+        })
 
     except Exception as e:
         logger.error(f"Error creating test case: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-@app.route('/analyze-code', methods=['POST'])
-def analyze_code():
-    """Analyze code using CrewAI agents"""
-    try:
-        code = request.json.get('code')
-        if not code:
-            return jsonify({'error': 'Code is required'}), 400
-
-        analysis_task = Task(
-            description=f"Analyze this code for test cases: {code}",
-            agent=requirement_input_agent
-        )
-
-        crew = Crew(
-            agents=[requirement_input_agent],
-            tasks=[analysis_task],
-            process=Process.sequential
-        )
-
-        analysis_result = crew.kickoff()
-        return jsonify({'status': 'success', 'analysis': analysis_result})
-
-    except Exception as e:
-        logger.error(f"Error in code analysis: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/login')
-def login():
-    return render_template('login.html')
-
-@app.route('/auth', methods=['POST'])
-def auth():
-    try:
-        auth_data = request.get_json()
-        # For now, just log the token receipt and return success
-        logger.info("Received authentication token")
-        return jsonify({"status": "success"})
-    except Exception as e:
-        logger.error(f"Authentication error: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 400
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
