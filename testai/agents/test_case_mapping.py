@@ -39,7 +39,92 @@ class TestCaseMappingAgent(BaseAgent):
         self.generated_cases = []
         self.zephyr_api_key = os.environ.get("ZEPHYR_API_KEY")
         self.zephyr_project_key = os.environ.get("ZEPHYR_PROJECT_KEY", "QADEMO")
-        self.zephyr_base_url = "https://api.zephyrscale.smartbear.com/v2"
+        # Updated base URL to use the correct endpoint
+        self.zephyr_base_url = "https://api.zephyrscale.smartbear.com/v2/testcases"
+
+    def _store_in_zephyr(self, test_case: Dict[str, Any]) -> bool:
+        """Store test case in Zephyr Scale
+
+        Args:
+            test_case: Test case data to store
+
+        Returns:
+            bool indicating success
+        """
+        try:
+            # Verify credentials
+            if not self.zephyr_api_key:
+                logging.error("ZEPHYR_API_KEY environment variable is not set")
+                return False
+
+            logging.info(f"Using Zephyr Scale project key: {self.zephyr_project_key}")
+            logging.info(f"Using Zephyr Scale API URL: {self.zephyr_base_url}")
+
+            # Format test case for Zephyr Scale API
+            zephyr_test_case = {
+                "projectKey": self.zephyr_project_key,
+                "name": test_case["title"],
+                "objective": test_case["description"],
+                "priorityName": test_case["format"]["priority"].upper(),
+                "statusName": "Draft"
+            }
+
+            # Add preconditions (Given)
+            if test_case["format"]["given"]:
+                zephyr_test_case["precondition"] = "\n".join(test_case["format"]["given"])
+
+            # Add test steps (When + Then)
+            steps = []
+            for step, expected in zip(test_case["format"]["when"], test_case["format"]["then"]):
+                steps.append({
+                    "description": step,
+                    "expectedResult": expected,
+                    "testData": ""
+                })
+            zephyr_test_case["steps"] = steps
+
+            # Add labels if tags exist
+            if test_case["format"].get("tags"):
+                zephyr_test_case["labels"] = test_case["format"]["tags"]
+
+            # Log the request details
+            logging.info(f"Sending request to Zephyr Scale with data: {json.dumps(zephyr_test_case, indent=2)}")
+
+            # Prepare headers - Using API key as bearer token
+            headers = {
+                "Authorization": f"Bearer {self.zephyr_api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            }
+
+            # Make the API request
+            response = requests.post(
+                self.zephyr_base_url,
+                headers=headers,
+                json=zephyr_test_case
+            )
+
+            # Log response details
+            logging.info(f"Zephyr Scale API Response Status: {response.status_code}")
+            logging.info(f"Zephyr Scale API Response Headers: {dict(response.headers)}")
+            logging.info(f"Zephyr Scale API Response Body: {response.text}")
+
+            if response.status_code in (200, 201):
+                response_data = response.json()
+                test_case_key = response_data.get('key', 'unknown')
+                logging.info(f"Successfully created test case in Zephyr Scale with key: {test_case_key}")
+                return True
+            else:
+                logging.error(f"Failed to create test case in Zephyr Scale. Status: {response.status_code}")
+                logging.error(f"Error response: {response.text}")
+                return False
+
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error while calling Zephyr Scale API: {str(e)}")
+            return False
+        except Exception as e:
+            logging.error(f"Unexpected error in Zephyr Scale integration: {str(e)}")
+            return False
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a test case mapping task
@@ -85,92 +170,6 @@ class TestCaseMappingAgent(BaseAgent):
         except Exception as e:
             logging.error(f"Error generating test case: {str(e)}")
             raise
-
-    def _store_in_zephyr(self, test_case: Dict[str, Any]) -> bool:
-        """Store test case in Zephyr Scale
-
-        Args:
-            test_case: Test case data to store
-
-        Returns:
-            bool indicating success
-        """
-        try:
-            # Verify credentials
-            if not self.zephyr_api_key:
-                logging.error("ZEPHYR_API_KEY environment variable is not set")
-                return False
-
-            logging.info(f"Using Zephyr Scale project key: {self.zephyr_project_key}")
-            logging.info(f"Using Zephyr Scale API URL: {self.zephyr_base_url}")
-
-            # Format test case for Zephyr Scale API
-            zephyr_test_case = {
-                "projectKey": self.zephyr_project_key,
-                "name": test_case["title"],
-                "objective": test_case["description"],
-                "priorityName": test_case["format"]["priority"].upper(),
-                "statusName": "Draft",
-                "folder": "/CrewAI Generated"  # Organize test cases in a folder
-            }
-
-            # Add preconditions (Given)
-            if test_case["format"]["given"]:
-                zephyr_test_case["precondition"] = "\n".join(test_case["format"]["given"])
-
-            # Add test steps (When + Then)
-            steps = []
-            for step, expected in zip(test_case["format"]["when"], test_case["format"]["then"]):
-                steps.append({
-                    "inline": {
-                        "description": step,
-                        "expectedResult": expected,
-                        "testData": ""
-                    }
-                })
-            zephyr_test_case["steps"] = steps
-
-            # Add labels if tags exist
-            if test_case["format"].get("tags"):
-                zephyr_test_case["labels"] = test_case["format"]["tags"]
-
-            # Log the request details
-            logging.info(f"Sending request to Zephyr Scale with data: {json.dumps(zephyr_test_case, indent=2)}")
-
-            # Prepare headers - Using API key directly without "Bearer"
-            headers = {
-                "Authorization": self.zephyr_api_key,
-                "Content-Type": "application/json"
-            }
-
-            # Make the API request
-            response = requests.post(
-                f"{self.zephyr_base_url}/testcases",
-                headers=headers,
-                json=zephyr_test_case
-            )
-
-            # Log response details
-            logging.info(f"Zephyr Scale API Response Status: {response.status_code}")
-            logging.info(f"Zephyr Scale API Response Headers: {dict(response.headers)}")
-            logging.info(f"Zephyr Scale API Response Body: {response.text}")
-
-            if response.status_code in (200, 201):
-                response_data = response.json()
-                test_case_key = response_data.get('key', 'unknown')
-                logging.info(f"Successfully created test case in Zephyr Scale with key: {test_case_key}")
-                return True
-            else:
-                logging.error(f"Failed to create test case in Zephyr Scale. Status: {response.status_code}")
-                logging.error(f"Error response: {response.text}")
-                return False
-
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Network error while calling Zephyr Scale API: {str(e)}")
-            return False
-        except Exception as e:
-            logging.error(f"Unexpected error in Zephyr Scale integration: {str(e)}")
-            return False
 
     def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
         """Generate a login-specific test case"""
