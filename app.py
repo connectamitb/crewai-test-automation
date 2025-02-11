@@ -63,8 +63,11 @@ def create_test_case():
             }), 400
 
         # Store in vector database
+        logger.info(f"Attempting to store test case in vector database: {test_case}")
         if vector_db.store_test_case(test_case):
-            logger.info("Test case stored in vector database")
+            logger.info("Test case successfully stored in vector database")
+        else:
+            logger.warning("Failed to store test case in vector database")
 
         # Return the complete test case structure
         return jsonify({
@@ -84,8 +87,10 @@ def search_test_cases():
         if not query:
             return jsonify({"status": "error", "message": "No search query provided"}), 400
 
+        logger.info(f"Searching test cases with query: {query}")
         limit = int(request.args.get('limit', 5))
         similar_cases = vector_db.search_similar_test_cases(query, limit)
+        logger.info(f"Found {len(similar_cases)} similar test cases")
 
         return jsonify({
             "status": "success",

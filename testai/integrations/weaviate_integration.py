@@ -28,8 +28,10 @@ class WeaviateIntegration:
             bool indicating success
         """
         try:
+            logging.info(f"Attempting to store test case: {test_case}")
             self.test_cases.append(test_case)
-            logging.info(f"Test case stored: {test_case['title']}")
+            logging.info(f"Successfully stored test case: {test_case['title']}")
+            logging.info(f"Total test cases in storage: {len(self.test_cases)}")
             return True
         except Exception as e:
             logging.error(f"Error storing test case: {str(e)}")
@@ -46,20 +48,29 @@ class WeaviateIntegration:
             List of similar test cases
         """
         try:
+            logging.info(f"Searching for test cases with query: {query}")
+            logging.info(f"Total test cases available: {len(self.test_cases)}")
+
             # Simple text-based search in mock implementation
             matched_cases = []
             query = query.lower()
 
             for case in self.test_cases:
-                if (query in case["title"].lower() or 
-                    query in case["description"].lower() or 
-                    any(query in step.lower() for step in case["format"]["given"] + 
-                        case["format"]["when"] + case["format"]["then"])):
-                    matched_cases.append(case)
+                try:
+                    if (query in case["title"].lower() or 
+                        query in case["description"].lower() or 
+                        any(query in step.lower() for step in case["format"]["given"] + 
+                            case["format"]["when"] + case["format"]["then"])):
+                        logging.info(f"Found matching test case: {case['title']}")
+                        matched_cases.append(case)
 
-                if len(matched_cases) >= limit:
-                    break
+                    if len(matched_cases) >= limit:
+                        break
+                except KeyError as ke:
+                    logging.warning(f"Malformed test case in storage: {ke}")
+                    continue
 
+            logging.info(f"Found {len(matched_cases)} matching test cases")
             return matched_cases
         except Exception as e:
             logging.error(f"Error searching test cases: {str(e)}")
