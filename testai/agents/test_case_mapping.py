@@ -69,7 +69,7 @@ class TestCaseMappingAgent(BaseAgent):
                 "statusName": "Draft",
                 # Add required custom field
                 "customFields": {
-                    "Automation": "Not Automated"
+                    "Automation": "TBD"
                 }
             }
 
