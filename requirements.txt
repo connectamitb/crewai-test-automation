@@ -82,3 +82,4 @@ weaviate-client==4.10.4
 flask
 pydantic
 python-dotenv
+weaviate-client==4.10.4
