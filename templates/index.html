@@ -321,6 +321,9 @@
     const requirement = document.getElementById('requirement').value;
 
     try {
+      // Show loading state
+      document.getElementById('result').classList.add('hidden');
+
       const response = await fetch('/api/test-cases', {
         method: 'POST',
         headers: {
@@ -328,6 +331,10 @@
         },
         body: JSON.stringify({ requirement })
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
       const data = await response.json();
 
@@ -337,40 +344,49 @@
 
       const testCase = data.test_case;
 
+      // Check if test case exists and has required properties
+      if (!testCase || !testCase.format) {
+        throw new Error('Invalid test case format received');
+      }
+
       // Show result section
       document.getElementById('result').classList.remove('hidden');
 
-      // Update test case details
-      document.getElementById('testCaseTitle').textContent = testCase.title || '';
+      // Update test case details - with null checks
+      document.getElementById('testCaseTitle').textContent = testCase.title || 'Untitled Test Case';
       document.getElementById('testCaseDescription').textContent = testCase.description || '';
 
       // Update prerequisites (given)
       const prerequisitesList = document.getElementById('testCasePrerequisites');
-      prerequisitesList.innerHTML = (testCase.format?.given || [])
-        .map(prereq => `<li>${prereq}</li>`)
-        .join('');
+      prerequisitesList.innerHTML = Array.isArray(testCase.format.given) ? 
+        testCase.format.given.map(prereq => `<li>${prereq}</li>`).join('') :
+        '<li>No prerequisites defined</li>';
 
       // Update steps (when)
       const stepsList = document.getElementById('testCaseSteps');
-      stepsList.innerHTML = (testCase.format?.when || [])
-        .map(step => `<li>${step}</li>`)
-        .join('');
+      stepsList.innerHTML = Array.isArray(testCase.format.when) ?
+        testCase.format.when.map(step => `<li>${step}</li>`).join('') :
+        '<li>No steps defined</li>';
 
       // Update expected results (then)
       const resultsList = document.getElementById('testCaseExpectedResults');
-      resultsList.innerHTML = (testCase.format?.then || [])
-        .map(result => `<li>${result}</li>`)
-        .join('');
+      resultsList.innerHTML = Array.isArray(testCase.format.then) ?
+        testCase.format.then.map(result => `<li>${result}</li>`).join('') :
+        '<li>No expected results defined</li>';
 
       // Update tags
       const tagsContainer = document.getElementById('testCaseTags');
-      tagsContainer.innerHTML = (testCase.format?.tags || [])
-        .map(tag => `<span class="px-2 py-1 bg-gray-200 rounded-full text-sm">${tag}</span>`)
-        .join('');
+      tagsContainer.innerHTML = Array.isArray(testCase.format.tags) ?
+        testCase.format.tags.map(tag => 
+          `<span class="px-2 py-1 bg-gray-200 rounded-full text-sm">${tag}</span>`
+        ).join('') :
+        '';
 
     } catch (error) {
       console.error('Error:', error);
       alert('Error generating test case: ' + error.message);
+      // Hide the result section on error
+      document.getElementById('result').classList.add('hidden');
     }
   });
   </script>

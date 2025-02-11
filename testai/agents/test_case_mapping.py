@@ -2,8 +2,6 @@
 from typing import Dict, List, Optional, Any
 import logging
 from pydantic import BaseModel
-import weaviate
-from weaviate.util import generate_uuid5
 
 from .base_agent import BaseAgent, AgentConfig
 
@@ -37,18 +35,6 @@ class TestCaseMappingAgent(BaseAgent):
         super().__init__(config)
         self.generated_cases = []
 
-        # Initialize Weaviate client with v4 API
-        try:
-            self.weaviate_client = weaviate.WeaviateClient(
-                connection_params=weaviate.connect.ConnectionParams.from_url(
-                    url="http://localhost:8080",
-                    grpc_port=50051
-                )
-            )
-        except Exception as e:
-            logging.warning(f"Weaviate initialization warning: {str(e)}")
-            self.weaviate_client = None
-
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a test case mapping task
 
@@ -72,12 +58,6 @@ class TestCaseMappingAgent(BaseAgent):
 
             # Convert to dict and structure the response
             test_case_dict = test_case.model_dump()
-
-            # Store in Weaviate
-            self._store_in_weaviate(test_case_dict)
-
-            # Store in Zephyr Scale (mock for now)
-            self._store_in_zephyr(test_case_dict)
 
             # Log successful generation
             logging.info(f"Generated test case: {test_case_dict['title']}")
@@ -155,31 +135,6 @@ class TestCaseMappingAgent(BaseAgent):
                 "requirement_text": requirement
             }
         )
-
-    def _store_in_weaviate(self, test_case: Dict[str, Any]) -> None:
-        """Store test case in Weaviate vector database"""
-        try:
-            if self.weaviate_client:
-                uuid = generate_uuid5(test_case["title"])
-                properties = {
-                    "title": test_case["title"],
-                    "description": test_case["description"],
-                    "steps": {
-                        "given": test_case["format"]["given"],
-                        "when": test_case["format"]["when"],
-                        "then": test_case["format"]["then"]
-                    },
-                    "tags": test_case["format"]["tags"],
-                    "metadata": test_case["metadata"]
-                }
-                self.weaviate_client.data.create(
-                    uuid=uuid,
-                    class_name="TestCase",
-                    properties=properties
-                )
-                logging.info(f"Test case stored in Weaviate: {test_case['title']}")
-        except Exception as e:
-            logging.error(f"Error storing in Weaviate: {str(e)}")
 
     def _store_in_zephyr(self, test_case: Dict[str, Any]) -> None:
         """Store test case in Zephyr Scale (mock implementation)"""

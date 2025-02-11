@@ -76,3 +76,9 @@ crewai
 flask
 python-dotenv
 weaviate-client
+trafilatura
+weaviate
+weaviate-client==4.10.4
+flask
+pydantic
+python-dotenv
