@@ -95,11 +95,11 @@ class TestCaseMappingAgent(BaseAgent):
             bool indicating success
         """
         if not self.zephyr_api_key or not self.zephyr_project_key:
-            logging.error("Zephyr Scale credentials not configured. ZEPHYR_API_KEY and ZEPHYR_PROJECT_KEY are required.")
+            logging.error(f"Zephyr Scale credentials not configured. ZEPHYR_API_KEY and ZEPHYR_PROJECT_KEY are required.")
             return False
 
         try:
-            logging.info(f"Preparing to store test case in Zephyr Scale: {test_case['title']}")
+            logging.info(f"Attempting to store test case in Zephyr Scale: {test_case}")
 
             # Format test case for Zephyr Scale
             zephyr_test_case = {
@@ -157,7 +157,7 @@ class TestCaseMappingAgent(BaseAgent):
                 return False
 
         except Exception as e:
-            logging.error(f"Error storing test case in Zephyr Scale: {str(e)}")
+            logging.error(f"Error in Zephyr Scale integration: {str(e)}")
             return False
 
     def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
