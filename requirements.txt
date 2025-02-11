@@ -63,3 +63,15 @@ python-dotenv
 PyYAML
 watchdog
 weaviate-client
+twilio
+crewai
+langchain>=0.1.4
+openai
+crewai>=0.14.1
+langchain-community>=0.0.9
+openai>=1.12.0
+python-dotenv>=1.0.0
+openai
+crewai
+flask
+python-dotenv
