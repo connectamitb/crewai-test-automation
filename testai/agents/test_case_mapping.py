@@ -38,6 +38,9 @@ class TestCaseMappingAgent(BaseAgent):
         super().__init__(config)
         self.logger = logging.getLogger(__name__)
         self.generated_cases = []
+        self.zephyr_api_key = os.environ.get("ZEPHYR_API_KEY")
+        self.zephyr_project_key = os.environ.get("ZEPHYR_PROJECT_KEY", "QADEMO")
+        self.zephyr_base_url = "https://api.zephyrscale.smartbear.com/v2/testcases"
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a test case mapping task"""
@@ -75,14 +78,78 @@ class TestCaseMappingAgent(BaseAgent):
             # Store locally for search
             self.generated_cases.append(test_case_dict)
 
+            # Store in Zephyr Scale if available
+            zephyr_result = self._store_in_zephyr(test_case_dict)
+            storage_info = {"memory": True, "zephyr": bool(zephyr_result)}
+
             return {
                 "status": "success",
-                "test_case": test_case_dict
+                "test_case": test_case_dict,
+                "storage": storage_info
             }
 
         except Exception as e:
             self.logger.error(f"Error in test case mapping: {str(e)}", exc_info=True)
             raise
+
+    def _store_in_zephyr(self, test_case: Dict[str, Any]) -> bool:
+        """Store test case in Zephyr Scale"""
+        try:
+            if not self.zephyr_api_key:
+                self.logger.warning("ZEPHYR_API_KEY not set, skipping Zephyr storage")
+                return False
+
+            headers = {
+                "Authorization": f"Bearer {self.zephyr_api_key}",
+                "Content-Type": "application/json"
+            }
+
+            # Format steps for Zephyr Scale
+            steps = []
+            for when_step, then_step in zip(
+                test_case["format"]["when"],
+                test_case["format"]["then"]
+            ):
+                steps.append({
+                    "description": when_step,
+                    "expectedResult": then_step,
+                    "testData": ""
+                })
+
+            payload = {
+                "projectKey": self.zephyr_project_key,
+                "name": test_case["title"],
+                "objective": test_case["description"],
+                "priorityName": test_case["format"]["priority"].upper(),
+                "statusName": "Draft",
+                "steps": steps
+            }
+
+            # Add preconditions if present
+            if test_case["format"]["given"]:
+                payload["precondition"] = "\n".join(test_case["format"]["given"])
+
+            # Add labels if present
+            if test_case["format"]["tags"]:
+                payload["labels"] = test_case["format"]["tags"]
+
+            response = requests.post(
+                self.zephyr_base_url,
+                headers=headers,
+                json=payload
+            )
+
+            if response.status_code in (200, 201):
+                result = response.json()
+                self.logger.info(f"Successfully created test case in Zephyr Scale: {result.get('key')}")
+                return True
+            else:
+                self.logger.error(f"Failed to create test case in Zephyr Scale: {response.text}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"Error storing test case in Zephyr Scale: {str(e)}")
+            return False
 
     def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
         """Generate a login-specific test case"""
@@ -93,17 +160,17 @@ class TestCaseMappingAgent(BaseAgent):
                 given=[
                     "User is on the login page",
                     "User has valid credentials",
-                    "The system is accessible"
+                    "System is accessible"
                 ],
                 when=[
-                    "User enters their username/email",
-                    "User enters their password",
+                    "User enters valid username",
+                    "User enters valid password",
                     "User clicks the login button"
                 ],
                 then=[
-                    "User is successfully logged in",
-                    "User is redirected to the dashboard",
-                    "Welcome message is displayed with user's name"
+                    "User is successfully authenticated",
+                    "User is redirected to dashboard",
+                    "Success message is displayed"
                 ],
                 tags=["authentication", "login", "critical-path", "smoke-test"],
                 priority="high"
