@@ -144,3 +144,5 @@ weaviate-client
 flask
 pydantic
 weaviate-client
+pydantic
+weaviate-client

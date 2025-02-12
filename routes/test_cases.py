@@ -4,6 +4,8 @@ from flask import Blueprint, request, jsonify
 from testai.agents.test_case_mapping import TestCaseMappingAgent
 from testai.agents.requirement_input import RequirementInputAgent, RequirementInput
 from testai.agents.nlp_parsing import NLPParsingAgent
+from integrations.weaviate_integration import WeaviateIntegration
+from integrations.zephyr_integration import ZephyrIntegration
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -108,7 +110,7 @@ def generate_test_case():
 
 @test_cases_bp.route('/test-cases/search', methods=['GET'])
 def search_test_cases():
-    """Search for test cases using in-memory search"""
+    """Search for test cases using vector similarity search"""
     try:
         query = request.args.get('q', '')
         if not query:
@@ -128,8 +130,11 @@ def search_test_cases():
 
 @test_cases_bp.route('/test-cases/<name>', methods=['GET'])
 def get_test_case(name):
-    """Get a test case by name from Weaviate"""
+    """Get a test case by name"""
     try:
+        if not weaviate_client:
+            return jsonify({"error": "Integration not initialized"}), 503
+
         result = weaviate_client.get_test_case_by_name(name)
         if result is None:
             return jsonify({"error": "Test case not found"}), 404
@@ -146,9 +151,11 @@ def init_integrations():
 
     logger.info("Initializing integrations...")
     try:
+        # Initialize Weaviate
         weaviate_client = WeaviateIntegration()
         logger.info("Successfully initialized Weaviate integration")
 
+        # Initialize Zephyr Scale
         zephyr_client = ZephyrIntegration()
         logger.info("Successfully initialized Zephyr integration")
 

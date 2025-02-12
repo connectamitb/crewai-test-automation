@@ -3,10 +3,11 @@ import os
 import logging
 from typing import Dict, List, Optional, Any
 import json
-import requests
 from pydantic import BaseModel
 
 from .base_agent import BaseAgent, AgentConfig
+from integrations.weaviate_integration import WeaviateIntegration
+from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
 
 class TestCaseFormat(BaseModel):
     """Model for test case format"""
@@ -38,9 +39,10 @@ class TestCaseMappingAgent(BaseAgent):
         super().__init__(config)
         self.logger = logging.getLogger(__name__)
         self.generated_cases = []
-        self.zephyr_api_key = os.environ.get("ZEPHYR_API_KEY")
-        self.zephyr_project_key = os.environ.get("ZEPHYR_PROJECT_KEY", "QADEMO")
-        self.zephyr_base_url = "https://api.zephyrscale.smartbear.com/v2/testcases"
+
+        # Initialize integrations
+        self.weaviate_client = WeaviateIntegration()
+        self.zephyr_client = ZephyrIntegration()
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a test case mapping task"""
@@ -53,34 +55,51 @@ class TestCaseMappingAgent(BaseAgent):
                 raise ValueError("Requirement data is required")
 
             # Create test case based on requirement
-            if isinstance(requirement, dict):
-                # If requirement is already structured
-                test_case = TestCaseOutput(
-                    title=requirement.get('title', 'Untitled Test Case'),
-                    description=requirement.get('description', ''),
-                    format=TestCaseFormat(
-                        given=requirement.get('format', {}).get('given', []),
-                        when=requirement.get('format', {}).get('when', []),
-                        then=requirement.get('format', {}).get('then', []),
-                        tags=requirement.get('format', {}).get('tags', []),
-                        priority=requirement.get('format', {}).get('priority', 'Normal')
-                    )
-                )
-            else:
-                # If requirement is a string or other format
-                is_login = "login" in str(requirement).lower()
-                test_case = self._generate_login_test_case(requirement) if is_login else self._generate_generic_test_case(requirement)
-
-            # Convert to dict for response
+            test_case = self._generate_test_case(requirement)
             test_case_dict = test_case.model_dump()
             self.logger.debug(f"Generated test case: {test_case_dict}")
 
             # Store locally for search
             self.generated_cases.append(test_case_dict)
 
-            # Store in Zephyr Scale if available
-            zephyr_result = self._store_in_zephyr(test_case_dict)
-            storage_info = {"memory": True, "zephyr": bool(zephyr_result)}
+            # Store in Weaviate
+            weaviate_stored = False
+            try:
+                weaviate_id = self.weaviate_client.store_test_case(test_case_dict)
+                weaviate_stored = bool(weaviate_id)
+                self.logger.info(f"Stored test case in Weaviate: {weaviate_id}")
+            except Exception as e:
+                self.logger.error(f"Failed to store in Weaviate: {str(e)}")
+
+            # Store in Zephyr Scale
+            zephyr_stored = False
+            try:
+                # Convert to Zephyr format
+                zephyr_test_case = ZephyrTestCase(
+                    name=test_case.title,
+                    objective=test_case.description,
+                    precondition="\n".join(test_case.format.given),
+                    steps=[{
+                        "step": step,
+                        "test_data": "",
+                        "expected_result": expected
+                    } for step, expected in zip(test_case.format.when, test_case.format.then)],
+                    priority=test_case.format.priority,
+                    labels=test_case.format.tags
+                )
+
+                # Store in Zephyr
+                zephyr_key = self.zephyr_client.create_test_case(zephyr_test_case)
+                zephyr_stored = bool(zephyr_key)
+                self.logger.info(f"Stored test case in Zephyr Scale: {zephyr_key}")
+            except Exception as e:
+                self.logger.error(f"Failed to store in Zephyr Scale: {str(e)}")
+
+            storage_info = {
+                "memory": True,
+                "weaviate": weaviate_stored,
+                "zephyr": zephyr_stored
+            }
 
             return {
                 "status": "success",
@@ -92,64 +111,10 @@ class TestCaseMappingAgent(BaseAgent):
             self.logger.error(f"Error in test case mapping: {str(e)}", exc_info=True)
             raise
 
-    def _store_in_zephyr(self, test_case: Dict[str, Any]) -> bool:
-        """Store test case in Zephyr Scale"""
-        try:
-            if not self.zephyr_api_key:
-                self.logger.warning("ZEPHYR_API_KEY not set, skipping Zephyr storage")
-                return False
-
-            headers = {
-                "Authorization": f"Bearer {self.zephyr_api_key}",
-                "Content-Type": "application/json"
-            }
-
-            # Format steps for Zephyr Scale
-            steps = []
-            for when_step, then_step in zip(
-                test_case["format"]["when"],
-                test_case["format"]["then"]
-            ):
-                steps.append({
-                    "description": when_step,
-                    "expectedResult": then_step,
-                    "testData": ""
-                })
-
-            payload = {
-                "projectKey": self.zephyr_project_key,
-                "name": test_case["title"],
-                "objective": test_case["description"],
-                "priorityName": test_case["format"]["priority"].upper(),
-                "statusName": "Draft",
-                "steps": steps
-            }
-
-            # Add preconditions if present
-            if test_case["format"]["given"]:
-                payload["precondition"] = "\n".join(test_case["format"]["given"])
-
-            # Add labels if present
-            if test_case["format"]["tags"]:
-                payload["labels"] = test_case["format"]["tags"]
-
-            response = requests.post(
-                self.zephyr_base_url,
-                headers=headers,
-                json=payload
-            )
-
-            if response.status_code in (200, 201):
-                result = response.json()
-                self.logger.info(f"Successfully created test case in Zephyr Scale: {result.get('key')}")
-                return True
-            else:
-                self.logger.error(f"Failed to create test case in Zephyr Scale: {response.text}")
-                return False
-
-        except Exception as e:
-            self.logger.error(f"Error storing test case in Zephyr Scale: {str(e)}")
-            return False
+    def _generate_test_case(self, requirement: str) -> TestCaseOutput:
+        """Generate a test case based on requirement"""
+        is_login = "login" in str(requirement).lower()
+        return self._generate_login_test_case(requirement) if is_login else self._generate_generic_test_case(requirement)
 
     def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
         """Generate a login-specific test case"""
@@ -204,40 +169,70 @@ class TestCaseMappingAgent(BaseAgent):
         )
 
     def query_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Search for test cases in memory"""
+        """Search for test cases in memory and vector database"""
         try:
             matched_cases = []
-            query = query.lower()
 
-            for case in self.generated_cases:
-                score = 0
+            # Search in Weaviate
+            try:
+                weaviate_results = self.weaviate_client.search_test_cases(query, limit)
+                if weaviate_results:
+                    matched_cases.extend(weaviate_results)
+            except Exception as e:
+                self.logger.error(f"Error searching Weaviate: {str(e)}")
 
-                # Match title
-                if query in case['title'].lower():
-                    score += 0.4
+            # Search in memory as backup
+            memory_results = self._search_memory(query, limit)
+            if memory_results:
+                matched_cases.extend(memory_results)
 
-                # Match description
-                if query in case['description'].lower():
-                    score += 0.3
+            # Deduplicate by title
+            seen_titles = set()
+            unique_cases = []
+            for case in matched_cases:
+                title = case.get('title', '')
+                if title not in seen_titles:
+                    seen_titles.add(title)
+                    unique_cases.append(case)
 
-                # Match steps
-                steps = case['format']['given'] + case['format']['when'] + case['format']['then']
-                if any(query in step.lower() for step in steps):
-                    score += 0.3
-
-                if score > 0:
-                    matched_cases.append({
-                        'test_case': case,
-                        'score': score
-                    })
-
-            # Sort by score and return top matches
-            matched_cases.sort(key=lambda x: x['score'], reverse=True)
-            return [x['test_case'] for x in matched_cases[:limit]]
+            return unique_cases[:limit]
 
         except Exception as e:
             self.logger.error(f"Error querying test cases: {str(e)}")
             return []
+
+    def _search_memory(self, query: str, limit: int) -> List[Dict[str, Any]]:
+        """Search for test cases in memory"""
+        matched_cases = []
+        query = query.lower()
+
+        for case in self.generated_cases:
+            score = 0
+            title = case.get('title', '').lower()
+            desc = case.get('description', '').lower()
+
+            if query in title:
+                score += 0.4
+            if query in desc:
+                score += 0.3
+
+            if case.get('format'):
+                steps = (
+                    case['format'].get('given', []) +
+                    case['format'].get('when', []) +
+                    case['format'].get('then', [])
+                )
+                if any(query in step.lower() for step in steps):
+                    score += 0.3
+
+            if score > 0:
+                matched_cases.append({
+                    'test_case': case,
+                    'score': score
+                })
+
+        matched_cases.sort(key=lambda x: x['score'], reverse=True)
+        return [x['test_case'] for x in matched_cases[:limit]]
 
     def update_status(self) -> Dict[str, Any]:
         """Update and return the current status of the agent"""
