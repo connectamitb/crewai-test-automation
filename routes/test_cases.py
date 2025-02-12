@@ -1,11 +1,10 @@
 """Routes for test case management"""
 import logging
 from flask import Blueprint, request, jsonify
-from integrations.models import TestCase
+from testai.agents.test_case_mapping import TestCaseMappingAgent
+from testai.agents.requirement_input import RequirementInputAgent, RequirementInput
 from integrations.weaviate_integration import WeaviateIntegration
 from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
-from agents.requirement_input import RequirementInputAgent, RequirementInput
-from agents.nlp_parsing import NLPParsingAgent
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -16,7 +15,7 @@ test_cases_bp = Blueprint('test_cases', __name__)
 
 # Initialize agents and integrations
 requirement_agent = RequirementInputAgent()
-nlp_agent = NLPParsingAgent()
+test_case_mapping_agent = TestCaseMappingAgent()
 
 def init_integrations():
     """Initialize integration clients"""
@@ -40,105 +39,82 @@ weaviate_client = None
 zephyr_client = None
 init_integrations()
 
-@test_cases_bp.before_request
-def ensure_integrations():
-    """Ensure integrations are initialized before each request"""
-    if not weaviate_client or not zephyr_client:
-        if not init_integrations():
-            return jsonify({"error": "Failed to initialize integrations"}), 500
-
-@test_cases_bp.route('/test-cases', methods=['POST'])
-def create_test_case():
-    """Create test cases from requirements and sync to both Weaviate and Zephyr Scale"""
+@test_cases_bp.route('/generate-test-case', methods=['POST'])
+def generate_test_case():
+    """Generate and store test cases from requirements"""
     try:
-        logger.info("Received request to create test case")
+        logger.info("Received request to generate test case")
         data = request.get_json()
-        if not data:
-            logger.error("No data provided in request")
-            return jsonify({"error": "No data provided"}), 400
+        if not data or 'requirement' not in data:
+            return jsonify({"error": "Requirement text is required"}), 400
 
-        logger.info(f"Processing test case creation request with data: {data}")
+        requirement_text = data['requirement']
+        logger.info(f"Generating test case for requirement: {requirement_text}")
 
-        # Process requirements through agents
+        # Process requirement through requirement agent
         requirement = RequirementInput(
-            raw_text=data.get("requirement_text", ""),
-            wireframe_paths=data.get("wireframe_paths", []),
-            project_key=data.get("project_key")
+            raw_text=requirement_text,
+            project_key=data.get('project_key')
         )
 
-        # Clean and parse requirements
-        logger.debug("Cleaning requirement...")
-        cleaned_req = requirement_agent.clean_requirement(requirement)
-        logger.debug(f"Cleaned requirement: {cleaned_req}")
+        processed_req = requirement_agent.execute_task({
+            'raw_text': requirement.raw_text,
+            'project_key': requirement.project_key
+        })
 
-        logger.debug("Parsing requirement...")
-        parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
-        logger.debug(f"Parsed test case: {parsed_test_case}")
+        if not processed_req.get('status') == 'success':
+            return jsonify({"error": "Failed to process requirement"}), 400
 
-        # Create Weaviate test case
-        logger.info("Creating Weaviate test case...")
-        weaviate_test_case = TestCase(
-            name=parsed_test_case.name,
-            objective=parsed_test_case.objective,
-            precondition=parsed_test_case.precondition,
-            automation_needed=parsed_test_case.automation_needed,
-            steps=parsed_test_case.steps
-        )
-        weaviate_id = weaviate_client.store_test_case(weaviate_test_case)
-        logger.info(f"Stored test case in Weaviate with ID: {weaviate_id}")
+        # Generate test case using mapping agent
+        test_case = test_case_mapping_agent.execute_task({
+            'requirement': processed_req['processed_requirement']['text']
+        })
 
-        # Create Zephyr test case
-        logger.info("Creating Zephyr test case...")
-        zephyr_test_case = ZephyrTestCase(
-            name=parsed_test_case.name,
-            objective=parsed_test_case.objective,
-            precondition=parsed_test_case.precondition,
-            steps=parsed_test_case.steps,
-            priority="Normal",
-            labels=["automated", "weaviate-synced"]
-        )
-        zephyr_key = zephyr_client.create_test_case(zephyr_test_case)
-        logger.info(f"Stored test case in Zephyr Scale with key: {zephyr_key}")
+        if not test_case or 'test_case' not in test_case:
+            return jsonify({"error": "Failed to generate test case"}), 500
 
-        response_data = {
-            "message": "Test case created successfully",
-            "weaviate_id": weaviate_id,
-            "zephyr_key": zephyr_key,
-            "parsed_test_case": parsed_test_case.dict()
-        }
-        logger.info(f"Sending response: {response_data}")
-        return jsonify(response_data), 201
+        logger.info("Successfully generated test case")
+        return jsonify(test_case), 201
 
     except Exception as e:
-        logger.error(f"Error creating test case: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 400
+        logger.error(f"Error generating test case: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @test_cases_bp.route('/test-cases/search', methods=['GET'])
 def search_test_cases():
-    """Search for test cases in both systems"""
+    """Search for test cases using vector similarity search"""
     try:
         query = request.args.get('q', '')
         limit = int(request.args.get('limit', 10))
-        source = request.args.get('source', 'all').lower()
 
-        results = {
-            "weaviate": [],
-            "zephyr": []
-        }
+        if not query:
+            return jsonify({"error": "Search query is required"}), 400
 
-        # Search in Weaviate
-        if source in ['all', 'weaviate']:
-            results["weaviate"] = weaviate_client.search_test_cases(query, limit)
+        logger.info(f"Searching test cases with query: {query}")
 
-        # Search in Zephyr Scale
-        if source in ['all', 'zephyr']:
-            results["zephyr"] = zephyr_client.search_test_cases(query, limit)
+        # Perform vector search in Weaviate
+        weaviate_results = weaviate_client.search_test_cases(query, limit)
+        logger.info(f"Found {len(weaviate_results)} results in Weaviate")
 
-        return jsonify(results), 200
+        # Format results
+        formatted_results = []
+        for result in weaviate_results:
+            formatted_result = {
+                "title": result.get("name", ""),
+                "description": result.get("objective", ""),
+                "steps": result.get("steps", []),
+                "score": result.get("_additional", {}).get("score", 0)
+            }
+            formatted_results.append(formatted_result)
+
+        return jsonify({
+            "results": formatted_results,
+            "total": len(formatted_results)
+        }), 200
 
     except Exception as e:
         logger.error(f"Error searching test cases: {str(e)}")
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 500
 
 @test_cases_bp.route('/test-cases/<name>', methods=['GET'])
 def get_test_case(name):

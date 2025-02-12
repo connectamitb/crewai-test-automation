@@ -141,3 +141,6 @@ flask-wtf
 pydantic
 python-dotenv
 weaviate-client
+flask
+pydantic
+weaviate-client

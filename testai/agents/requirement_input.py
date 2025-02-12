@@ -5,6 +5,13 @@ from pydantic import BaseModel
 
 from .base_agent import BaseAgent, AgentConfig
 
+class RequirementInput(BaseModel):
+    """Model for requirement input"""
+    raw_text: str
+    wireframe_paths: Optional[List[str]] = None
+    project_key: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
 class RequirementData(BaseModel):
     """Model for requirement data validation"""
     raw_text: str
@@ -27,14 +34,7 @@ class RequirementInputAgent(BaseAgent):
         self.processed_requirements = []
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a requirement processing task
-        
-        Args:
-            task: Task containing raw requirement data and optional wireframes
-            
-        Returns:
-            Dict containing processed and validated requirements
-        """
+        """Execute a requirement processing task"""
         try:
             raw_data = RequirementData(**task)
             self.logger.info(f"Processing requirement: {raw_data.raw_text[:100]}...")
@@ -67,28 +67,14 @@ class RequirementInputAgent(BaseAgent):
             raise
 
     def _clean_requirement(self, text: str) -> str:
-        """Clean and normalize requirement text
-        
-        Args:
-            text: Raw requirement text
-            
-        Returns:
-            Cleaned requirement text
-        """
+        """Clean and normalize requirement text"""
         # Basic cleaning operations
         cleaned = text.strip()
         cleaned = " ".join(cleaned.split())  # Normalize whitespace
         return cleaned
 
     def _validate_requirement(self, text: str) -> Dict[str, Any]:
-        """Validate requirement text
-        
-        Args:
-            text: Cleaned requirement text
-            
-        Returns:
-            Dict containing validation results
-        """
+        """Validate requirement text"""
         validation_results = {
             "is_valid": True,
             "checks": {
@@ -108,14 +94,7 @@ class RequirementInputAgent(BaseAgent):
         return validation_results
 
     def _process_wireframes(self, wireframe_paths: List[str]) -> List[Dict[str, Any]]:
-        """Process and validate wireframe files
-        
-        Args:
-            wireframe_paths: List of paths to wireframe files
-            
-        Returns:
-            List of processed wireframe information
-        """
+        """Process and validate wireframe files"""
         wireframe_info = []
         for path in wireframe_paths:
             try:
@@ -139,11 +118,7 @@ class RequirementInputAgent(BaseAgent):
         return wireframe_info
 
     def handle_event(self, event: Dict[str, Any]) -> None:
-        """Handle requirement-related events
-        
-        Args:
-            event: Event data to process
-        """
+        """Handle requirement-related events"""
         event_type = event.get('type')
         if event_type == 'requirement_update':
             self.logger.info("Handling requirement update event")
@@ -152,7 +127,6 @@ class RequirementInputAgent(BaseAgent):
                 self.execute_task({"raw_text": requirement})
         elif event_type == 'config_update':
             self.logger.info("Handling configuration update event")
-            # Handle configuration updates if needed
 
     def update_status(self) -> Dict[str, Any]:
         """Update and return the current status of the agent"""
