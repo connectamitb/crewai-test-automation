@@ -160,29 +160,35 @@ class TestCaseMappingAgent(BaseAgent):
             self.logger.info(f"Searching for: {query}")
             matched_cases = []
 
-            # Search in Weaviate
-            try:
-                weaviate_results = self.weaviate_client.search_test_cases(query, limit)
-                if weaviate_results:
-                    matched_cases.extend(weaviate_results)
-            except Exception as e:
-                self.logger.error(f"Weaviate search error: {str(e)}")
-
-            # Search in memory as backup
+            # Search in memory first
             memory_results = self._search_memory(query, limit)
             if memory_results:
+                self.logger.info(f"Found {len(memory_results)} results in memory")
                 matched_cases.extend(memory_results)
+
+            # Try Weaviate search if available
+            try:
+                if self.weaviate_client._client is not None:
+                    weaviate_results = self.weaviate_client.search_test_cases(query, limit)
+                    if weaviate_results:
+                        self.logger.info(f"Found {len(weaviate_results)} results in Weaviate")
+                        matched_cases.extend(weaviate_results)
+                else:
+                    self.logger.warning("Weaviate client not initialized, skipping vector search")
+            except Exception as e:
+                self.logger.error(f"Weaviate search error: {str(e)}")
+                # Continue with memory results only
 
             # Deduplicate by title
             seen_titles = set()
             unique_cases = []
             for case in matched_cases:
                 title = case.get('title', '')
-                if title not in seen_titles:
+                if title and title not in seen_titles:
                     seen_titles.add(title)
                     unique_cases.append(case)
 
-            self.logger.info(f"Found {len(unique_cases)} unique test cases")
+            self.logger.info(f"Returning {len(unique_cases)} unique test cases")
             return unique_cases[:limit]
 
         except Exception as e:

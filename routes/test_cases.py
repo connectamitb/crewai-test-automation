@@ -76,15 +76,17 @@ def search_test_cases():
 
         logger.info(f"Received search request with query: {query}")
 
-        # Initialize Weaviate client if not already initialized
-        weaviate_client = WeaviateIntegration()
-
         # Search using the test case mapping agent which handles both vector and memory search
         logger.info("Executing search using test case mapping agent...")
         results = test_case_mapping_agent.query_test_cases(query)
 
         logger.info(f"Found {len(results)} test cases matching query: {query}")
         logger.debug(f"Search results: {results}")
+
+        # Ensure we have a valid list of results
+        if not isinstance(results, list):
+            logger.error("Invalid results format received from search")
+            results = []
 
         return jsonify({
             "status": "success",
@@ -94,7 +96,12 @@ def search_test_cases():
 
     except Exception as e:
         logger.error(f"Error searching test cases: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({
+            "error": str(e),
+            "status": "error",
+            "results": [],
+            "total": 0
+        }), 500
 
 @test_cases_bp.route('/test-cases/<name>', methods=['GET'])
 def get_test_case(name):
