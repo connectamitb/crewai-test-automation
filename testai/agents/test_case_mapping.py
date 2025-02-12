@@ -2,7 +2,7 @@
 import logging
 from typing import Dict, List, Optional, Any
 
-from integrations.models import TestCase
+from integrations.models import TestCase, TestCaseFormat
 from .base_agent import BaseAgent, AgentConfig
 from integrations.weaviate_integration import WeaviateIntegration
 from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
@@ -57,16 +57,15 @@ class TestCaseMappingAgent(BaseAgent):
             # Store in Zephyr Scale
             zephyr_stored = False
             try:
-                # Convert to Zephyr format
                 zephyr_test_case = ZephyrTestCase(
                     name=test_case.title,
                     objective=test_case.description,
-                    precondition="\n".join(test_case.given),
+                    precondition="\n".join(test_case.format.given),
                     steps=[{
                         "step": step,
                         "test_data": "",
                         "expected_result": expected
-                    } for step, expected in zip(test_case.when, test_case.then)],
+                    } for step, expected in zip(test_case.format.when, test_case.format.then)],
                     priority=test_case.priority,
                     labels=test_case.tags
                 )
@@ -94,16 +93,14 @@ class TestCaseMappingAgent(BaseAgent):
             self.logger.error(f"Error in test case mapping: {str(e)}", exc_info=True)
             raise
 
-    def _generate_test_case(self, requirement: str) -> TestCase:
+    def _generate_test_case(self, requirement: Dict[str, Any]) -> TestCase:
         """Generate a test case based on requirement"""
         is_login = "login" in str(requirement).lower()
         return self._generate_login_test_case(requirement) if is_login else self._generate_generic_test_case(requirement)
 
-    def _generate_login_test_case(self, requirement: str) -> TestCase:
+    def _generate_login_test_case(self, requirement: Dict[str, Any]) -> TestCase:
         """Generate a login-specific test case"""
-        return TestCase(
-            title="Test: Login Functionality",
-            description=str(requirement),
+        format = TestCaseFormat(
             given=[
                 "User is on the login page",
                 "User has valid credentials",
@@ -118,16 +115,20 @@ class TestCaseMappingAgent(BaseAgent):
                 "User is successfully authenticated",
                 "User is redirected to dashboard",
                 "Success message is displayed"
-            ],
+            ]
+        )
+
+        return TestCase(
+            title="Test: Login Functionality",
+            description=str(requirement.get('description', '')),
+            format=format,
             tags=["authentication", "login", "critical-path", "smoke-test"],
             priority="high"
         )
 
-    def _generate_generic_test_case(self, requirement: str) -> TestCase:
+    def _generate_generic_test_case(self, requirement: Dict[str, Any]) -> TestCase:
         """Generate a generic test case"""
-        return TestCase(
-            title=f"Test: {str(requirement)[:50]}",
-            description=str(requirement),
+        format = TestCaseFormat(
             given=[
                 "User is logged into the system",
                 "Required permissions are granted",
@@ -142,7 +143,13 @@ class TestCaseMappingAgent(BaseAgent):
                 "Operation completes successfully",
                 "Expected results are verified",
                 "System state is updated correctly"
-            ],
+            ]
+        )
+
+        return TestCase(
+            title=f"Test: {str(requirement.get('description', ''))[:50]}",
+            description=str(requirement.get('description', '')),
+            format=format,
             tags=["functional", "regression"],
             priority="medium"
         )

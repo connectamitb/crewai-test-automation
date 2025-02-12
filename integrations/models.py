@@ -8,20 +8,20 @@ class TestStep(BaseModel):
     test_data: Optional[str] = None
     expected_result: str
 
-class WeaviateTestCase(BaseModel):
-    """Test case model with format matching Weaviate schema"""
-    title: str
-    description: str
-    format: Dict[str, List[str]]  # Contains given/when/then lists
-    metadata: Optional[Dict] = None
-
-class TestCase(WeaviateTestCase):
-    """Test case model with full functionality"""
+class TestCaseFormat(BaseModel):
+    """Model for test case format"""
     given: List[str]
     when: List[str]
     then: List[str]
+
+class TestCase(BaseModel):
+    """Test case model with full functionality"""
+    title: str
+    description: str
+    format: TestCaseFormat
     tags: Optional[List[str]] = None
     priority: str = "Normal"
+    metadata: Optional[Dict] = None
 
     def to_weaviate_format(self) -> Dict:
         """Convert to Weaviate-compatible format"""
@@ -37,9 +37,9 @@ class TestCase(WeaviateTestCase):
             "title": self.title,
             "description": self.description,
             "format": {
-                "given": self.given,
-                "when": self.when,
-                "then": self.then
+                "given": self.format.given,
+                "when": self.format.when,
+                "then": self.format.then
             },
             "metadata": metadata
         }
