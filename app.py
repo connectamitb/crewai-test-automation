@@ -19,8 +19,13 @@ def create_app():
         app = Flask(__name__)
         app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_key")
 
-        # Initialize integrations before registering blueprints
-        init_integrations()
+        # Initialize integrations - but don't fail if they're not ready
+        try:
+            init_integrations()
+            logger.info("Successfully initialized integrations")
+        except Exception as e:
+            logger.warning(f"Failed to initialize integrations: {str(e)}")
+            # Continue anyway - integrations will be initialized on first request
 
         # Register blueprints
         app.register_blueprint(test_cases_bp, url_prefix='/api/v1')

@@ -20,9 +20,14 @@ def init_integrations():
     """Initialize integration clients"""
     global weaviate_client, zephyr_client
     try:
-        weaviate_client = WeaviateIntegration()
-        zephyr_client = ZephyrIntegration()
-        logger.info("Successfully initialized Weaviate and Zephyr integrations")
+        if not weaviate_client:
+            weaviate_client = WeaviateIntegration()
+            logger.info("Successfully initialized Weaviate integration")
+
+        if not zephyr_client:
+            zephyr_client = ZephyrIntegration()
+            logger.info("Successfully initialized Zephyr integration")
+
         return True
     except Exception as e:
         logger.error(f"Error initializing integrations: {str(e)}")
@@ -46,6 +51,7 @@ def create_test_case():
         # Create Weaviate test case
         weaviate_test_case = TestCase(**data)
         weaviate_id = weaviate_client.store_test_case(weaviate_test_case)
+        logger.debug(f"Stored test case in Weaviate with ID: {weaviate_id}")
 
         # Create Zephyr test case
         zephyr_test_case = ZephyrTestCase(
@@ -61,6 +67,7 @@ def create_test_case():
             labels=["automated", "weaviate-synced"]
         )
         zephyr_key = zephyr_client.create_test_case(zephyr_test_case)
+        logger.debug(f"Stored test case in Zephyr Scale with key: {zephyr_key}")
 
         return jsonify({
             "message": "Test case created successfully",
