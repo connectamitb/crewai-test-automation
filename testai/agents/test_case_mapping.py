@@ -1,11 +1,12 @@
 """TestCaseMappingAgent implementation for generating formatted test cases."""
-from typing import Dict, List, Optional, Any
-import logging
 import os
+import logging
+from typing import Dict, List, Optional, Any
 import json
 import requests
 from pydantic import BaseModel
 from itertools import zip_longest
+from integrations.weaviate_integration import WeaviateIntegration, TestCase
 
 from .base_agent import BaseAgent, AgentConfig
 
@@ -15,7 +16,7 @@ class TestCaseFormat(BaseModel):
     when: List[str]
     then: List[str]
     tags: Optional[List[str]] = None
-    priority: str = "Normal"  # Updated to use Zephyr Scale's standard priority
+    priority: str = "Normal"
 
 class TestCaseOutput(BaseModel):
     """Model for complete test case output"""
@@ -40,158 +41,180 @@ class TestCaseMappingAgent(BaseAgent):
         self.generated_cases = []
         self.zephyr_api_key = os.environ.get("ZEPHYR_API_KEY")
         self.zephyr_project_key = os.environ.get("ZEPHYR_PROJECT_KEY", "QADEMO")
-        # Updated base URL to use the correct endpoint
         self.zephyr_base_url = "https://api.zephyrscale.smartbear.com/v2/testcases"
 
-    def search_test_cases(self, query: str = None, labels: List[str] = None, max_results: int = 10) -> List[Dict[str, Any]]:
-        """Search for test cases in Zephyr Scale
-
-        Args:
-            query: Optional search query text
-            labels: Optional list of labels to filter by
-            max_results: Maximum number of results to return (default: 10)
-
-        Returns:
-            List of matching test cases
-        """
+        # Initialize vector database integration
         try:
-            if not self.zephyr_api_key:
-                logging.error("ZEPHYR_API_KEY environment variable is not set")
-                return []
+            self.vector_db = WeaviateIntegration()
+            logging.info("Successfully initialized Weaviate integration")
+        except Exception as e:
+            logging.error(f"Failed to initialize Weaviate integration: {str(e)}")
+            self.vector_db = None
 
-            # Construct search URL with query parameters
-            search_url = f"{self.zephyr_base_url}"
-            params = {
-                "projectKey": self.zephyr_project_key,
-                "maxResults": max_results
-            }
+    def query_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Search for test cases using semantic search with fallback"""
+        try:
+            # Try vector search first
+            if self.vector_db:
+                similar_cases = self.vector_db.search_test_cases(query, limit)
+                if similar_cases:
+                    logging.info(f"Found {len(similar_cases)} test cases using vector search")
+                    return similar_cases
 
-            if query:
-                params["text"] = query
-            if labels:
-                params["label"] = labels
-
-            # Prepare headers
-            headers = {
-                "Authorization": f"Bearer {self.zephyr_api_key}",
-                "Accept": "application/json"
-            }
-
-            # Make the search request
-            logging.info(f"Searching test cases with params: {params}")
-            response = requests.get(search_url, headers=headers, params=params)
-
-            if response.status_code == 200:
-                results = response.json()
-                logging.info(f"Found {len(results)} test cases")
-
-                # Format results
-                formatted_results = []
-                for test_case in results:
-                    formatted_case = {
-                        "key": test_case.get("key"),
-                        "name": test_case.get("name"),
-                        "objective": test_case.get("objective"),
-                        "priority": test_case.get("priorityName"),
-                        "labels": test_case.get("labels", []),
-                        "steps": len(test_case.get("script", {}).get("steps", [])) if test_case.get("script") else 0
-                    }
-                    formatted_results.append(formatted_case)
-
-                return formatted_results
-            else:
-                logging.error(f"Failed to search test cases. Status: {response.status_code}")
-                logging.error(f"Error response: {response.text}")
-                return []
+            # Fallback to in-memory search
+            return self._in_memory_search(query, limit)
 
         except Exception as e:
-            logging.error(f"Error searching test cases: {str(e)}")
+            logging.error(f"Error querying test cases: {str(e)}")
+            return self._in_memory_search(query, limit)
+
+    def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a test case mapping task"""
+        try:
+            # Generate or use provided test case
+            if isinstance(task, TestCaseOutput):
+                test_case = task
+            else:
+                requirement = task.get('requirement')
+                if not requirement:
+                    raise ValueError("Requirement data is required")
+
+                is_login = "login" in requirement.lower()
+                test_case = self._generate_login_test_case(requirement) if is_login else self._generate_generic_test_case(requirement)
+
+            # Convert to dict for storage
+            test_case_dict = test_case.model_dump()
+
+            # Store in memory for local search
+            self.generated_cases.append(test_case_dict)
+            logging.info(f"Stored test case in memory: {test_case_dict['title']}")
+
+            # Store in Zephyr Scale
+            zephyr_result = self._store_in_zephyr(test_case_dict)
+            if zephyr_result:
+                logging.info(f"Successfully stored test case in Zephyr Scale: {test_case_dict['title']}")
+            else:
+                logging.warning(f"Failed to store test case in Zephyr Scale: {test_case_dict['title']}")
+
+            # Store in vector database
+            if self.vector_db:
+                try:
+                    # Convert to TestCase model for Weaviate
+                    weaviate_test_case = TestCase(
+                        name=test_case_dict["title"],
+                        objective=test_case_dict["description"],
+                        precondition="\n".join(test_case_dict["format"]["given"]),
+                        automation_needed="Yes",
+                        steps=[{
+                            "step": step,
+                            "test_data": "",
+                            "expected_result": expected
+                        } for step, expected in zip_longest(
+                            test_case_dict["format"]["when"],
+                            test_case_dict["format"]["then"],
+                            fillvalue=""
+                        )]
+                    )
+                    self.vector_db.store_test_case(weaviate_test_case)
+                    logging.info(f"Successfully stored test case in vector database: {test_case_dict['title']}")
+                except Exception as e:
+                    logging.error(f"Failed to store test case in vector database: {str(e)}")
+
+            return {
+                "status": "success",
+                "test_case": test_case_dict,
+                "storage": {
+                    "memory": True,
+                    "zephyr": bool(zephyr_result),
+                    "vector_db": self.vector_db is not None
+                }
+            }
+
+        except Exception as e:
+            logging.error(f"Error in test case mapping task: {str(e)}")
+            raise
+
+    def _in_memory_search(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Perform in-memory search when vector search is unavailable"""
+        try:
+            matches = []
+            query_terms = [term.lower() for term in query.split() 
+                         if len(term) > 2 and term.lower() not in {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'test', 'case'}]
+
+            if not query_terms:
+                return []
+
+            for case in self.generated_cases:
+                score = 0
+                title_lower = case["title"].lower()
+                desc_lower = case["description"].lower()
+
+                # Title matching (highest weight)
+                title_matches = sum(1 for term in query_terms if term in title_lower)
+                if title_matches:
+                    score += 0.8 * (title_matches / len(query_terms))
+
+                # Description matching
+                desc_matches = sum(1 for term in query_terms if term in desc_lower)
+                if desc_matches:
+                    score += 0.5 * (desc_matches / len(query_terms))
+
+                # Consider significant matches only
+                if score > 0.3:
+                    matches.append({
+                        "test_case": case,
+                        "score": min(score, 1.0)
+                    })
+
+            matches.sort(key=lambda x: x["score"], reverse=True)
+            return matches[:limit]
+
+        except Exception as e:
+            logging.error(f"Error in memory search: {str(e)}")
             return []
 
     def _store_in_zephyr(self, test_case: Dict[str, Any]) -> bool:
-        """Store test case in Zephyr Scale
-        Args:
-            test_case: Test case data to store
-        Returns:
-            bool indicating success
-        """
+        """Store test case in Zephyr Scale"""
         try:
             # Verify credentials
             if not self.zephyr_api_key:
                 logging.error("ZEPHYR_API_KEY environment variable is not set")
                 return False
 
-            logging.info(f"Using Zephyr Scale project key: {self.zephyr_project_key}")
-            logging.info(f"Using Zephyr Scale API URL: {self.zephyr_base_url}")
-
             # Format test case for Zephyr Scale API
-            steps = []
-            step_number = 1
-
-            # Convert Given steps
-            for given_step in test_case["format"]["given"]:
-                steps.append({
-                    "index": step_number,
-                    "description": f"GIVEN: {given_step}",
-                    "testData": "",
-                    "expectedResult": "Precondition is satisfied"
-                })
-                step_number += 1
-
-            # Convert When steps
-            for when_step in test_case["format"]["when"]:
-                steps.append({
-                    "index": step_number,
-                    "description": f"WHEN: {when_step}",
-                    "testData": self._generate_test_data(when_step, step_number),
-                    "expectedResult": ""  # Will be paired with Then steps
-                })
-                step_number += 1
-
-            # Convert Then steps
-            then_steps = test_case["format"]["then"]
-            for i, then_step in enumerate(then_steps):
-                # Find the corresponding When step if available
-                when_step_index = i + len(test_case["format"]["given"])
-                if when_step_index < len(steps):
-                    # Update the expected result of the corresponding When step
-                    steps[when_step_index]["expectedResult"] = f"THEN: {then_step}"
-                else:
-                    # Add as a separate verification step
-                    steps.append({
-                        "index": step_number,
-                        "description": f"Verify: {then_step}",
-                        "testData": "",
-                        "expectedResult": f"THEN: {then_step}"
-                    })
-                    step_number += 1
-
             zephyr_test_case = {
                 "projectKey": self.zephyr_project_key,
                 "name": test_case["title"],
                 "objective": test_case["description"],
-                "priorityName": test_case["format"]["priority"],
+                "priorityName": test_case["format"]["priority"].upper(),
                 "statusName": "Draft",
-                "labels": test_case["format"].get("tags", []),
                 "customFields": {
                     "Automation": "TBD"
-                },
-                "script": {
-                    "type": "STEP_BY_STEP",
-                    "steps": steps
                 }
             }
 
-            # Add preconditions (Given) as a summary
+            # Add preconditions (Given)
             if test_case["format"]["given"]:
-                zephyr_test_case["precondition"] = "Prerequisites:\n" + "\n".join([
-                    f"- {step}" for step in test_case["format"]["given"]
-                ])
+                zephyr_test_case["precondition"] = "\n".join(test_case["format"]["given"])
 
-            # Log the formatted request payload
-            logging.info(f"Sending request to Zephyr Scale with data: {json.dumps(zephyr_test_case, indent=2)}")
+            # Combine when and then steps
+            steps = []
+            for step, expected in zip_longest(
+                test_case["format"].get("when", []), 
+                test_case["format"].get("then", [])
+            ):
+                steps.append({
+                    "description": step if step else "",
+                    "expectedResult": expected if expected else "",
+                    "testData": ""
+                })
+            zephyr_test_case["steps"] = steps
 
-            # Prepare headers with bearer token
+            # Add labels if tags exist
+            if test_case["format"].get("tags"):
+                zephyr_test_case["labels"] = test_case["format"]["tags"]
+
+            # Prepare headers
             headers = {
                 "Authorization": f"Bearer {self.zephyr_api_key}",
                 "Content-Type": "application/json",
@@ -205,11 +228,6 @@ class TestCaseMappingAgent(BaseAgent):
                 json=zephyr_test_case
             )
 
-            # Log response details
-            logging.info(f"Zephyr Scale API Response Status: {response.status_code}")
-            logging.info(f"Zephyr Scale API Response Headers: {dict(response.headers)}")
-            logging.info(f"Zephyr Scale API Response Body: {response.text}")
-
             if response.status_code in (200, 201):
                 response_data = response.json()
                 test_case_key = response_data.get('key', 'unknown')
@@ -220,66 +238,12 @@ class TestCaseMappingAgent(BaseAgent):
                 logging.error(f"Error response: {response.text}")
                 return False
 
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Network error while calling Zephyr Scale API: {str(e)}")
+            return False
         except Exception as e:
             logging.error(f"Error in Zephyr Scale integration: {str(e)}")
             return False
-
-    def _generate_test_data(self, step: str, index: int) -> str:
-        """Generate appropriate test data based on step description"""
-        step_lower = step.lower()
-        if "username" in step_lower or "email" in step_lower:
-            return "testuser@example.com"
-        elif "password" in step_lower:
-            return "TestPassword123!"
-        elif "date" in step_lower:
-            return "2025-02-12"
-        elif "number" in step_lower:
-            return f"TEST{index:03d}"
-        else:
-            return f"Test data for step {index}"
-
-    def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a test case mapping task
-        Args:
-            task: Task containing requirement data
-        Returns:
-            Dict containing generated test case
-        """
-        try:
-            requirement = task.get('requirement')
-            if not requirement:
-                raise ValueError("Requirement data is required")
-
-            # Analyze the requirement text for login-specific details
-            is_login = "login" in requirement.lower()
-            if is_login:
-                test_case = self._generate_login_test_case(requirement)
-            else:
-                test_case = self._generate_generic_test_case(requirement)
-
-            # Convert to dict and structure the response
-            test_case_dict = test_case.model_dump()
-
-            # Store in Zephyr Scale
-            zephyr_result = self._store_in_zephyr(test_case_dict)
-            if zephyr_result:
-                logging.info(f"Test case successfully stored in Zephyr Scale: {test_case_dict['title']}")
-            else:
-                logging.warning(f"Failed to store test case in Zephyr Scale: {test_case_dict['title']}")
-
-            # Log successful generation
-            logging.info(f"Generated test case: {test_case_dict['title']}")
-
-            self.generated_cases.append(test_case_dict)
-
-            return {
-                "status": "success",
-                "test_case": test_case_dict
-            }
-
-        except Exception as e:
-            logging.error(f"Error generating test case: {str(e)}")
-            raise
 
     def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
         """Generate a login-specific test case"""
@@ -298,17 +262,17 @@ class TestCaseMappingAgent(BaseAgent):
                     "User clicks the login button"
                 ],
                 then=[
-                    "Username field accepts the input",
-                    "Password field accepts the input",
-                    "User is successfully logged in and redirected to the dashboard"
+                    "User is successfully logged in",
+                    "User is redirected to the dashboard",
+                    "Welcome message is displayed with user's name"
                 ],
                 tags=["authentication", "login", "critical-path", "smoke-test"],
-                priority="Normal"
+                priority="high"
             ),
             metadata={
                 "source": "requirement",
                 "type": "authentication",
-                "created_at": "2025-02-11",
+                "created_at": "2025-02-12",
                 "requirement_text": requirement
             }
         )
@@ -316,7 +280,7 @@ class TestCaseMappingAgent(BaseAgent):
     def _generate_generic_test_case(self, requirement: str) -> TestCaseOutput:
         """Generate a generic test case"""
         return TestCaseOutput(
-            title=f"Test: {requirement[:50]}...",
+            title=f"Test: {requirement[:50]}",
             description=requirement,
             format=TestCaseFormat(
                 given=[
@@ -335,11 +299,11 @@ class TestCaseMappingAgent(BaseAgent):
                     "System state is updated correctly"
                 ],
                 tags=["functional", "regression"],
-                priority="Normal"
+                priority="medium"
             ),
             metadata={
                 "source": "requirement",
-                "created_at": "2025-02-11",
+                "created_at": "2025-02-12",
                 "requirement_text": requirement
             }
         )
