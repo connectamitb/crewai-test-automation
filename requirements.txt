@@ -114,3 +114,13 @@ pydantic
 python-dotenv
 requests
 weaviate-client
+flask
+pydantic
+python-dotenv
+requests
+weaviate-client
+flask
+pydantic
+python-dotenv
+requests
+weaviate-client

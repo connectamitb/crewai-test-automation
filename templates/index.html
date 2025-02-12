@@ -60,23 +60,88 @@
     <div class="max-w-7xl mx-auto px-4">
       <div class="bg-white rounded-lg shadow p-6">
         <h2 class="text-2xl font-bold mb-4">Create Test Case</h2>
-        <form id="testRequirementForm" class="space-y-4">
+        <form id="testCaseForm" class="space-y-4">
           <div>
-            <label class="block text-gray-700 mb-2">Test Requirement</label>
-            <textarea 
-              id="requirement" 
-              name="requirement" 
-              rows="4" 
+            <label class="block text-gray-700 mb-2">Test Case Name</label>
+            <input 
+              type="text" 
+              id="name" 
+              name="name" 
               class="w-full border rounded p-2"
-              placeholder="Enter your test requirement (e.g., As a user, I want to log in...)"
+              required
+              placeholder="Enter test case name"
+            />
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-2">Objective</label>
+            <textarea 
+              id="objective" 
+              name="objective" 
+              rows="3" 
+              class="w-full border rounded p-2"
+              required
+              placeholder="Describe the test case objective"
             ></textarea>
           </div>
+          <div>
+            <label class="block text-gray-700 mb-2">Precondition</label>
+            <textarea 
+              id="precondition" 
+              name="precondition" 
+              rows="2" 
+              class="w-full border rounded p-2"
+              placeholder="Enter preconditions (if any)"
+            ></textarea>
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-2">Automation Needed</label>
+            <select 
+              id="automationNeeded" 
+              name="automationNeeded" 
+              class="w-full border rounded p-2"
+              required
+            >
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+              <option value="TBD">TBD</option>
+            </select>
+          </div>
+          <div id="stepsContainer">
+            <label class="block text-gray-700 mb-2">Test Steps</label>
+            <div class="space-y-4" id="steps">
+              <div class="step-entry border p-4 rounded">
+                <input 
+                  type="text" 
+                  name="step" 
+                  class="w-full border rounded p-2 mb-2"
+                  placeholder="Enter test step"
+                  required
+                />
+                <input 
+                  type="text" 
+                  name="test_data" 
+                  class="w-full border rounded p-2 mb-2"
+                  placeholder="Test data (optional)"
+                />
+                <input 
+                  type="text" 
+                  name="expected_result" 
+                  class="w-full border rounded p-2"
+                  placeholder="Expected result"
+                  required
+                />
+              </div>
+            </div>
+            <button type="button" id="addStep" class="mt-2 text-blue-500 hover:text-blue-600">
+              + Add Another Step
+            </button>
+          </div>
           <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            Generate Test Case
+            Create Test Case
           </button>
         </form>
 
-        <!-- Add Search Section -->
+        <!-- Search Section -->
         <div class="mt-8 pt-8 border-t">
           <h2 class="text-2xl font-bold mb-4">Search Test Cases</h2>
           <form id="searchForm" class="space-y-4">
@@ -87,55 +152,32 @@
                 id="searchQuery" 
                 name="query" 
                 class="w-full border rounded p-2"
-                placeholder="Enter search terms (e.g., login, registration...)"
+                placeholder="Search test cases..."
+                required
               />
             </div>
+            <div>
+              <label class="block text-gray-700 mb-2">Search In</label>
+              <select 
+                id="searchSource" 
+                name="source" 
+                class="w-full border rounded p-2"
+              >
+                <option value="all">All Sources</option>
+                <option value="weaviate">Weaviate Only</option>
+                <option value="zephyr">Zephyr Scale Only</option>
+              </select>
+            </div>
             <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-              Search Test Cases
+              Search
             </button>
           </form>
 
           <!-- Search Results -->
           <div id="searchResults" class="mt-8 hidden">
-            <h3 class="text-xl font-bold mb-4">Search Results:</h3>
+            <h3 class="text-xl font-bold mb-4">Search Results</h3>
             <div id="resultsList" class="space-y-4">
-              <!-- Results will be inserted here -->
-            </div>
-          </div>
-        </div>
-
-        <!-- Test Case Result Display -->
-        <div id="result" class="mt-8 hidden">
-          <h3 class="text-xl font-bold mb-4">Generated Test Case:</h3>
-          <div class="bg-gray-50 p-6 rounded-lg">
-            <div class="mb-4">
-              <h4 class="font-semibold text-gray-700">Title</h4>
-              <p id="testCaseTitle" class="mt-1"></p>
-            </div>
-
-            <div class="mb-4">
-              <h4 class="font-semibold text-gray-700">Description</h4>
-              <p id="testCaseDescription" class="mt-1"></p>
-            </div>
-
-            <div class="mb-4">
-              <h4 class="font-semibold text-gray-700">Prerequisites</h4>
-              <ul id="testCasePrerequisites" class="list-disc list-inside mt-1"></ul>
-            </div>
-
-            <div class="mb-4">
-              <h4 class="font-semibold text-gray-700">Test Steps</h4>
-              <ol id="testCaseSteps" class="list-decimal list-inside mt-1"></ol>
-            </div>
-
-            <div class="mb-4">
-              <h4 class="font-semibold text-gray-700">Expected Results</h4>
-              <ol id="testCaseExpectedResults" class="list-decimal list-inside mt-1"></ol>
-            </div>
-
-            <div>
-              <h4 class="font-semibold text-gray-700">Tags</h4>
-              <div id="testCaseTags" class="mt-1 flex flex-wrap gap-2"></div>
+              <!-- Results will be dynamically inserted here -->
             </div>
           </div>
         </div>
@@ -344,145 +386,153 @@
 
   <!-- Add this JavaScript before the closing body tag -->
   <script>
-  document.getElementById('testRequirementForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const requirement = document.getElementById('requirement').value;
+    // Add Step Button Handler
+    document.getElementById('addStep').addEventListener('click', () => {
+      const stepsContainer = document.getElementById('steps');
+      const newStep = document.createElement('div');
+      newStep.className = 'step-entry border p-4 rounded';
+      newStep.innerHTML = `
+        <input 
+          type="text" 
+          name="step" 
+          class="w-full border rounded p-2 mb-2"
+          placeholder="Enter test step"
+          required
+        />
+        <input 
+          type="text" 
+          name="test_data" 
+          class="w-full border rounded p-2 mb-2"
+          placeholder="Test data (optional)"
+        />
+        <input 
+          type="text" 
+          name="expected_result" 
+          class="w-full border rounded p-2"
+          placeholder="Expected result"
+          required
+        />
+      `;
+      stepsContainer.appendChild(newStep);
+    });
 
-    try {
-      // Show loading state
-      document.getElementById('result').classList.add('hidden');
+    // Form Submit Handler
+    document.getElementById('testCaseForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
 
-      const response = await fetch('/api/test-cases', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ requirement })
-      });
+      // Collect steps data
+      const stepEntries = document.querySelectorAll('.step-entry');
+      const steps = Array.from(stepEntries).map(entry => ({
+        step: entry.querySelector('[name="step"]').value,
+        test_data: entry.querySelector('[name="test_data"]').value,
+        expected_result: entry.querySelector('[name="expected_result"]').value
+      }));
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+      const testCaseData = {
+        name: document.getElementById('name').value,
+        objective: document.getElementById('objective').value,
+        precondition: document.getElementById('precondition').value,
+        automation_needed: document.getElementById('automationNeeded').value,
+        steps: steps
+      };
 
-      const data = await response.json();
-
-      if (data.status === 'error') {
-        throw new Error(data.message || 'Failed to generate test case');
-      }
-
-      const testCase = data.test_case;
-
-      // Check if test case exists and has required properties
-      if (!testCase || !testCase.format) {
-        throw new Error('Invalid test case format received');
-      }
-
-      // Show result section
-      document.getElementById('result').classList.remove('hidden');
-
-      // Update test case details - with null checks
-      document.getElementById('testCaseTitle').textContent = testCase.title || 'Untitled Test Case';
-      document.getElementById('testCaseDescription').textContent = testCase.description || '';
-
-      // Update prerequisites (given)
-      const prerequisitesList = document.getElementById('testCasePrerequisites');
-      prerequisitesList.innerHTML = Array.isArray(testCase.format.given) ? 
-        testCase.format.given.map(prereq => `<li>${prereq}</li>`).join('') :
-        '<li>No prerequisites defined</li>';
-
-      // Update steps (when)
-      const stepsList = document.getElementById('testCaseSteps');
-      stepsList.innerHTML = Array.isArray(testCase.format.when) ?
-        testCase.format.when.map(step => `<li>${step}</li>`).join('') :
-        '<li>No steps defined</li>';
-
-      // Update expected results (then)
-      const resultsList = document.getElementById('testCaseExpectedResults');
-      resultsList.innerHTML = Array.isArray(testCase.format.then) ?
-        testCase.format.then.map(result => `<li>${result}</li>`).join('') :
-        '<li>No expected results defined</li>';
-
-      // Update tags
-      const tagsContainer = document.getElementById('testCaseTags');
-      tagsContainer.innerHTML = Array.isArray(testCase.format.tags) ?
-        testCase.format.tags.map(tag => 
-          `<span class="px-2 py-1 bg-gray-200 rounded-full text-sm">${tag}</span>`
-        ).join('') :
-        '';
-
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error generating test case: ' + error.message);
-      // Hide the result section on error
-      document.getElementById('result').classList.add('hidden');
-    }
-  });
-
-  document.getElementById('searchForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const query = document.getElementById('searchQuery').value;
-
-    try {
-      const response = await fetch(`/api/test-cases/search?query=${encodeURIComponent(query)}`);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.status === 'error') {
-        throw new Error(data.message || 'Failed to search test cases');
-      }
-
-      // Show results section
-      document.getElementById('searchResults').classList.remove('hidden');
-
-      // Clear previous results
-      const resultsList = document.getElementById('resultsList');
-      resultsList.innerHTML = '';
-
-      // Display results
-      if (data.results && data.results.length > 0) {
-        data.results.forEach(testCase => {
-          const resultCard = document.createElement('div');
-          resultCard.className = 'bg-gray-50 p-4 rounded-lg';
-          resultCard.innerHTML = `
-            <h4 class="font-semibold text-lg">${testCase.title || 'Untitled'}</h4>
-            <p class="text-gray-600 mt-1">${testCase.description || ''}</p>
-            <div class="mt-2">
-              <h5 class="font-medium">Given:</h5>
-              <ul class="list-disc list-inside">
-                ${testCase.format.given.map(step => `<li>${step}</li>`).join('')}
-              </ul>
-              <h5 class="font-medium mt-2">When:</h5>
-              <ul class="list-disc list-inside">
-                ${testCase.format.when.map(step => `<li>${step}</li>`).join('')}
-              </ul>
-              <h5 class="font-medium mt-2">Then:</h5>
-              <ul class="list-disc list-inside">
-                ${testCase.format.then.map(step => `<li>${step}</li>`).join('')}
-              </ul>
-            </div>
-            ${testCase.format.tags ? `
-              <div class="mt-2 flex flex-wrap gap-2">
-                ${testCase.format.tags.map(tag => 
-                  `<span class="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">${tag}</span>`
-                ).join('')}
-              </div>
-            ` : ''}
-          `;
-          resultsList.appendChild(resultCard);
+      try {
+        const response = await fetch('/api/v1/test-cases', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(testCaseData)
         });
-      } else {
-        resultsList.innerHTML = '<p class="text-gray-600">No test cases found matching your search.</p>';
-      }
 
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Error searching test cases: ' + error.message);
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to create test case');
+        }
+
+        alert('Test case created successfully!');
+        e.target.reset();
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Error creating test case: ' + error.message);
+      }
+    });
+
+    // Search Form Handler
+    document.getElementById('searchForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const query = document.getElementById('searchQuery').value;
+      const source = document.getElementById('searchSource').value;
+
+      try {
+        const response = await fetch(`/api/v1/test-cases/search?q=${encodeURIComponent(query)}&source=${source}`);
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to search test cases');
+        }
+
+        const searchResults = document.getElementById('searchResults');
+        const resultsList = document.getElementById('resultsList');
+        searchResults.classList.remove('hidden');
+        resultsList.innerHTML = '';
+
+        // Display results from both sources
+        if (result.weaviate && result.weaviate.length > 0) {
+          result.weaviate.forEach(testCase => {
+            const resultCard = createResultCard(testCase, 'Weaviate');
+            resultsList.appendChild(resultCard);
+          });
+        }
+
+        if (result.zephyr && result.zephyr.length > 0) {
+          result.zephyr.forEach(testCase => {
+            const resultCard = createResultCard(testCase, 'Zephyr Scale');
+            resultsList.appendChild(resultCard);
+          });
+        }
+
+        if (!result.weaviate?.length && !result.zephyr?.length) {
+          resultsList.innerHTML = '<p class="text-gray-600">No test cases found matching your search.</p>';
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Error searching test cases: ' + error.message);
+      }
+    });
+
+    function createResultCard(testCase, source) {
+      const card = document.createElement('div');
+      card.className = 'bg-gray-50 p-4 rounded-lg';
+      card.innerHTML = `
+        <div class="flex justify-between items-start">
+          <h4 class="font-semibold text-lg">${testCase.name}</h4>
+          <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">${source}</span>
+        </div>
+        <p class="text-gray-600 mt-1">${testCase.objective}</p>
+        ${testCase.precondition ? `
+          <div class="mt-2">
+            <h5 class="font-medium">Precondition:</h5>
+            <p class="text-gray-600">${testCase.precondition}</p>
+          </div>
+        ` : ''}
+        <div class="mt-2">
+          <h5 class="font-medium">Steps:</h5>
+          <ol class="list-decimal list-inside">
+            ${testCase.steps.map(step => `
+              <li class="mt-1">
+                ${step.step}
+                ${step.test_data ? `<br><span class="text-sm text-gray-500">Test Data: ${step.test_data}</span>` : ''}
+                <br><span class="text-sm text-green-600">Expected: ${step.expected_result}</span>
+              </li>
+            `).join('')}
+          </ol>
+        </div>
+      `;
+      return card;
     }
-  });
   </script>
 
 </body>

@@ -1,40 +1,61 @@
 """Weaviate integration for storing and retrieving test cases."""
 import os
 import logging
-import weaviate
-from weaviate.auth import AuthApiKey
+from typing import Optional, Dict, List
+try:
+    import weaviate
+    from weaviate import Client
+    WEAVIATE_AVAILABLE = True
+except ImportError:
+    WEAVIATE_AVAILABLE = False
+
 from .models import TestCase
 
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(WeaviateIntegration, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self):
         """Initialize Weaviate client with configuration"""
+        if self._initialized:
+            return
+
         try:
+            if not WEAVIATE_AVAILABLE:
+                raise ImportError("Weaviate client not installed")
+
             # Configure logging
             self.logger = logging.getLogger(__name__)
+            self.logger.setLevel(logging.INFO)
 
-            # Create auth config
-            auth_config = AuthApiKey(
-                api_key=os.environ.get('WEAVIATE_API_KEY', "SmLT0gm7xrJSWeBt2zaX0UE3EU9s6zC5lmub")
-            )
+            # Get API key from environment
+            self.api_key = os.environ.get('WEAVIATE_API_KEY')
+            if not self.api_key:
+                raise ValueError("WEAVIATE_API_KEY environment variable not set")
 
-            # Initialize Weaviate client directly
-            self.client = weaviate.Client(
+            # Initialize client
+            self.client = Client(
                 url="https://mtkcafmlsuso0nc3pcaujg.c0.us-west3.gcp.weaviate.cloud",
-                auth_client_secret=auth_config
+                auth_client_secret=weaviate.AuthApiKey(api_key=self.api_key)
             )
 
-            self.logger.info("Successfully connected to Weaviate")
+            self._initialized = True
+            self.logger.info("Successfully initialized Weaviate client")
 
             # Ensure schema exists
             self._ensure_schema()
 
         except Exception as e:
-            self.logger.error(f"Error connecting to Weaviate: {str(e)}")
+            self.logger.error(f"Failed to initialize Weaviate client: {str(e)}")
             raise
 
-    def _ensure_schema(self):
+    def _ensure_schema(self) -> None:
         """Ensure the required schema exists in Weaviate"""
         try:
             schema = {
@@ -70,8 +91,8 @@ class WeaviateIntegration:
                 ]
             }
 
-            # Create schema if it doesn't exist
-            if "TestCase" not in [c["class"] for c in self.client.schema.get()["classes"]]:
+            existing_classes = [c["class"] for c in self.client.schema.get()["classes"]]
+            if "TestCase" not in existing_classes:
                 self.client.schema.create_class(schema)
                 self.logger.info("Created TestCase schema")
 
@@ -79,7 +100,7 @@ class WeaviateIntegration:
             self.logger.error(f"Error ensuring schema: {str(e)}")
             raise
 
-    def store_test_case(self, test_case: TestCase) -> str:
+    def store_test_case(self, test_case: TestCase) -> Optional[str]:
         """Store a test case in Weaviate"""
         try:
             # Convert steps to string array for storage
@@ -89,15 +110,17 @@ class WeaviateIntegration:
             ]
 
             # Create data object
+            data_object = {
+                "name": test_case.name,
+                "objective": test_case.objective,
+                "precondition": test_case.precondition,
+                "automationNeeded": test_case.automation_needed,
+                "steps": steps_str
+            }
+
             result = self.client.data_object.create(
                 class_name="TestCase",
-                data_object={
-                    "name": test_case.name,
-                    "objective": test_case.objective,
-                    "precondition": test_case.precondition,
-                    "automationNeeded": test_case.automation_needed,
-                    "steps": steps_str
-                }
+                data_object=data_object
             )
 
             self.logger.info(f"Successfully stored test case: {test_case.name}")
@@ -107,7 +130,7 @@ class WeaviateIntegration:
             self.logger.error(f"Failed to store test case: {str(e)}")
             return None
 
-    def search_test_cases(self, query: str, limit: int = 10) -> list:
+    def search_test_cases(self, query: str, limit: int = 10) -> List[Dict]:
         """Search for test cases using semantic search"""
         try:
             result = (
@@ -126,7 +149,7 @@ class WeaviateIntegration:
             self.logger.error(f"Failed to search test cases: {str(e)}")
             return []
 
-    def get_test_case_by_name(self, name: str) -> dict:
+    def get_test_case_by_name(self, name: str) -> Optional[Dict]:
         """Retrieve a test case by its name"""
         try:
             result = (
