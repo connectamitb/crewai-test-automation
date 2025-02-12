@@ -3,6 +3,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from testai.agents.test_case_mapping import TestCaseMappingAgent
 from testai.agents.requirement_input import RequirementInputAgent, RequirementInput
+from testai.agents.nlp_parsing import NLPParsingAgent
 from integrations.weaviate_integration import WeaviateIntegration
 from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
 
@@ -15,6 +16,7 @@ test_cases_bp = Blueprint('test_cases', __name__)
 
 # Initialize agents and integrations
 requirement_agent = RequirementInputAgent()
+nlp_agent = NLPParsingAgent()
 test_case_mapping_agent = TestCaseMappingAgent()
 
 def init_integrations():
@@ -51,7 +53,7 @@ def generate_test_case():
         requirement_text = data['requirement']
         logger.info(f"Generating test case for requirement: {requirement_text}")
 
-        # Process requirement through requirement agent
+        # Step 1: Process requirement through requirement agent
         requirement = RequirementInput(
             raw_text=requirement_text,
             project_key=data.get('project_key')
@@ -65,9 +67,17 @@ def generate_test_case():
         if not processed_req.get('status') == 'success':
             return jsonify({"error": "Failed to process requirement"}), 400
 
-        # Generate test case using mapping agent
+        # Step 2: Parse requirement through NLP agent
+        parsed_req = nlp_agent.execute_task({
+            'cleaned_requirement': processed_req['processed_requirement']['text']
+        })
+
+        if not parsed_req.get('status') == 'success':
+            return jsonify({"error": "Failed to parse requirement"}), 400
+
+        # Step 3: Generate test case using mapping agent
         test_case = test_case_mapping_agent.execute_task({
-            'requirement': processed_req['processed_requirement']['text']
+            'requirement': parsed_req['parsed_requirement']
         })
 
         if not test_case or 'test_case' not in test_case:
