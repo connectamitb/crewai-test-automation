@@ -26,13 +26,13 @@ class WeaviateIntegration:
         if self._initialized:
             return
 
+        # Configure logging first
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.INFO)
+
         try:
             if not WEAVIATE_AVAILABLE:
                 raise ImportError("Weaviate client not installed")
-
-            # Configure logging
-            self.logger = logging.getLogger(__name__)
-            self.logger.setLevel(logging.INFO)
 
             # Get API key from environment
             self.api_key = os.environ.get('WEAVIATE_API_KEY')

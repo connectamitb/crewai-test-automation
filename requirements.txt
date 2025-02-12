@@ -126,3 +126,5 @@ requests
 weaviate-client
 pydantic
 weaviate-client
+pydantic
+weaviate-client
