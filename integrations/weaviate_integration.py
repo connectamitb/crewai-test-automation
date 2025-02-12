@@ -2,23 +2,19 @@
 import os
 import logging
 from typing import Optional, Dict, List
-try:
-    import weaviate
-    from weaviate import Client
-    WEAVIATE_AVAILABLE = True
-except ImportError:
-    WEAVIATE_AVAILABLE = False
 
+# Import models before weaviate to prevent circular imports
 from .models import TestCase
 
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
     _instance = None
+    _initialized = False
+    _client = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(WeaviateIntegration, cls).__new__(cls)
-            cls._instance._initialized = False
         return cls._instance
 
     def __init__(self):
@@ -26,36 +22,53 @@ class WeaviateIntegration:
         if self._initialized:
             return
 
-        # Configure logging first
+        # Configure logging
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.DEBUG)
+
+    def _lazy_init(self):
+        """Lazy initialization of Weaviate client to avoid import issues"""
+        if self._initialized:
+            return
 
         try:
-            if not WEAVIATE_AVAILABLE:
-                raise ImportError("Weaviate client not installed")
+            # Import weaviate here to avoid circular imports
+            import weaviate
+            from weaviate import Client
 
             # Get API key from environment
             self.api_key = os.environ.get('WEAVIATE_API_KEY')
             if not self.api_key:
                 raise ValueError("WEAVIATE_API_KEY environment variable not set")
 
-            # Initialize client
-            self.client = Client(
+            # Initialize client with configuration
+            self._client = Client(
                 url="https://mtkcafmlsuso0nc3pcaujg.c0.us-west3.gcp.weaviate.cloud",
-                auth_client_secret=weaviate.AuthApiKey(api_key=self.api_key)
+                auth_client_secret=weaviate.auth.AuthApiKey(api_key=self.api_key),
+                additional_headers={
+                    "X-OpenAI-Api-Key": os.environ.get("OPENAI_API_KEY", "")
+                }
             )
+
+            # Test connection
+            self._client.schema.get()
+            self.logger.info("Successfully connected to Weaviate")
+
+            # Initialize schema
+            self._ensure_schema()
 
             self._initialized = True
             self.logger.info("Successfully initialized Weaviate client")
 
-            # Ensure schema exists
-            self._ensure_schema()
-
+        except ImportError as e:
+            self.logger.error(f"Failed to import Weaviate: {str(e)}")
+            raise
         except Exception as e:
             self.logger.error(f"Failed to initialize Weaviate client: {str(e)}")
+            self._initialized = False
             raise
 
-    def _ensure_schema(self) -> None:
+    def _ensure_schema(self):
         """Ensure the required schema exists in Weaviate"""
         try:
             schema = {
@@ -81,20 +94,23 @@ class WeaviateIntegration:
                     {
                         "name": "automationNeeded",
                         "dataType": ["text"],
-                        "description": "Whether automation is needed (Yes/No/TBD)"
+                        "description": "Whether automation is needed"
                     },
                     {
                         "name": "steps",
                         "dataType": ["text[]"],
-                        "description": "Test steps with data and expected results"
+                        "description": "Test steps"
                     }
                 ]
             }
 
-            existing_classes = [c["class"] for c in self.client.schema.get()["classes"]]
-            if "TestCase" not in existing_classes:
-                self.client.schema.create_class(schema)
-                self.logger.info("Created TestCase schema")
+            # Check if schema exists
+            existing_classes = self._client.schema.get()
+            class_names = [c["class"] for c in existing_classes.get("classes", [])]
+
+            if "TestCase" not in class_names:
+                self._client.schema.create_class(schema)
+                self.logger.info("Created TestCase schema in Weaviate")
 
         except Exception as e:
             self.logger.error(f"Error ensuring schema: {str(e)}")
@@ -103,13 +119,13 @@ class WeaviateIntegration:
     def store_test_case(self, test_case: TestCase) -> Optional[str]:
         """Store a test case in Weaviate"""
         try:
-            # Convert steps to string array for storage
+            self._lazy_init()  # Ensure client is initialized
+
             steps_str = [
                 f"Step: {step['step']}\nTest Data: {step['test_data']}\nExpected Result: {step['expected_result']}"
                 for step in test_case.steps
             ]
 
-            # Create data object
             data_object = {
                 "name": test_case.name,
                 "objective": test_case.objective,
@@ -118,9 +134,10 @@ class WeaviateIntegration:
                 "steps": steps_str
             }
 
-            result = self.client.data_object.create(
+            result = self._client.data_object.create(
                 class_name="TestCase",
-                data_object=data_object
+                data_object=data_object,
+                consistency_level="ALL"
             )
 
             self.logger.info(f"Successfully stored test case: {test_case.name}")
@@ -133,8 +150,10 @@ class WeaviateIntegration:
     def search_test_cases(self, query: str, limit: int = 10) -> List[Dict]:
         """Search for test cases using semantic search"""
         try:
+            self._lazy_init()  # Ensure client is initialized
+
             result = (
-                self.client.query
+                self._client.query
                 .get("TestCase", ["name", "objective", "precondition", "automationNeeded", "steps"])
                 .with_near_text({"concepts": [query]})
                 .with_limit(limit)
@@ -152,8 +171,10 @@ class WeaviateIntegration:
     def get_test_case_by_name(self, name: str) -> Optional[Dict]:
         """Retrieve a test case by its name"""
         try:
+            self._lazy_init()  # Ensure client is initialized
+
             result = (
-                self.client.query
+                self._client.query
                 .get("TestCase", ["name", "objective", "precondition", "automationNeeded", "steps"])
                 .with_where({
                     "path": ["name"],
