@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 from routes.test_cases import test_cases_bp, init_integrations
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables

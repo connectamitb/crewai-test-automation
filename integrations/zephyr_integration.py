@@ -1,6 +1,7 @@
 """Zephyr Scale integration for test case management."""
 import os
 import logging
+import json
 from typing import Dict, List, Any, Optional
 import requests
 from pydantic import BaseModel
@@ -19,23 +20,35 @@ class ZephyrIntegration:
 
     def __init__(self):
         """Initialize Zephyr Scale client with configuration"""
-        self.api_key = os.environ.get("ZEPHYR_API_KEY")
-        self.project_key = os.environ.get("ZEPHYR_PROJECT_KEY", "QADEMO")
-        self.base_url = "https://api.zephyrscale.smartbear.com/v2"
+        # Configure logger
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
+        # Add console handler if not already added
+        if not self.logger.handlers:
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(asctime)s - ZEPHYR - %(levelname)s - %(message)s')
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
+
+        self.api_key = os.environ.get("ZEPHYR_API_KEY")
+        self.project_key = os.environ.get("ZEPHYR_PROJECT_KEY", "QADEMO")
+        self.base_url = "https://api.zephyrscale.smartbear.com/v2"
+
         if not self.api_key:
-            self.logger.warning("ZEPHYR_API_KEY not set in environment variables")
+            self.logger.warning("⚠️ ZEPHYR_API_KEY not set in environment variables")
+        else:
+            self.logger.info("✅ Zephyr Scale integration initialized with API key")
 
     def create_test_case(self, test_case: ZephyrTestCase) -> Optional[str]:
         """Create a test case in Zephyr Scale"""
         try:
             if not self.api_key:
-                self.logger.error("Cannot create test case: ZEPHYR_API_KEY not set")
+                self.logger.error("❌ Cannot create test case: ZEPHYR_API_KEY not set")
                 return None
 
-            self.logger.debug(f"Creating test case in Zephyr Scale: {test_case.name}")
+            self.logger.info(f"📝 Creating test case in Zephyr Scale: {test_case.name}")
 
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -50,7 +63,7 @@ class ZephyrIntegration:
                     "testData": step.get("test_data", ""),
                     "expectedResult": step.get("expected_result", "")
                 }
-                self.logger.debug(f"Formatted step: {formatted_step}")
+                self.logger.debug(f"Step formatted: {json.dumps(formatted_step, indent=2)}")
                 formatted_steps.append(formatted_step)
 
             payload = {
@@ -68,7 +81,8 @@ class ZephyrIntegration:
             if test_case.labels:
                 payload["labels"] = test_case.labels
 
-            self.logger.debug(f"Sending request to Zephyr Scale: {payload}")
+            self.logger.info("🚀 Sending request to Zephyr Scale API")
+            self.logger.debug(f"Request payload: {json.dumps(payload, indent=2)}")
 
             response = requests.post(
                 f"{self.base_url}/testcases",
@@ -77,22 +91,22 @@ class ZephyrIntegration:
                 timeout=30
             )
 
-            self.logger.debug(f"Zephyr Scale response status: {response.status_code}")
-            self.logger.debug(f"Zephyr Scale response body: {response.text}")
+            self.logger.info(f"📨 Zephyr Scale response status: {response.status_code}")
+            self.logger.debug(f"Response body: {response.text}")
 
             if response.status_code in (200, 201):
                 result = response.json()
-                self.logger.info(f"Successfully created test case in Zephyr Scale: {result.get('key')}")
+                self.logger.info(f"✅ Successfully created test case in Zephyr Scale: {result.get('key')}")
                 return result.get("key")
             else:
-                self.logger.error(f"Failed to create test case in Zephyr Scale: {response.text}")
+                self.logger.error(f"❌ Failed to create test case in Zephyr Scale: {response.text}")
                 return None
 
         except requests.exceptions.RequestException as e:
-            self.logger.error(f"Network error creating test case in Zephyr Scale: {str(e)}")
+            self.logger.error(f"❌ Network error creating test case in Zephyr Scale: {str(e)}")
             return None
         except Exception as e:
-            self.logger.error(f"Error creating test case in Zephyr Scale: {str(e)}")
+            self.logger.error(f"❌ Error creating test case in Zephyr Scale: {str(e)}")
             return None
 
     def get_test_case(self, key: str) -> Optional[Dict[str, Any]]:
