@@ -25,6 +25,7 @@ def generate_test_case():
     try:
         logger.info("Received request to generate test case")
         data = request.get_json()
+        logger.debug(f"Received data: {data}")
 
         if not data or 'requirement' not in data:
             logger.error("Missing requirement in request data")
@@ -39,11 +40,13 @@ def generate_test_case():
                 raw_text=requirement_text,
                 project_key=data.get('project_key')
             )
+            logger.debug(f"Created requirement input: {requirement}")
 
             processed_req = requirement_agent.execute_task({
                 'raw_text': requirement.raw_text,
                 'project_key': requirement.project_key
             })
+            logger.debug(f"Processed requirement result: {processed_req}")
 
             if not processed_req.get('status') == 'success':
                 logger.error(f"Requirement processing failed: {processed_req}")
@@ -52,14 +55,16 @@ def generate_test_case():
             logger.info("Successfully processed requirement")
 
         except Exception as e:
-            logger.error(f"Error in requirement processing: {str(e)}")
+            logger.error(f"Error in requirement processing: {str(e)}", exc_info=True)
             return jsonify({"error": f"Requirement processing error: {str(e)}"}), 500
 
         # Step 2: Parse requirement through NLP agent
         try:
+            logger.debug(f"Sending to NLP agent: {processed_req['processed_requirement']['text']}")
             parsed_req = nlp_agent.execute_task({
                 'cleaned_requirement': processed_req['processed_requirement']['text']
             })
+            logger.debug(f"NLP parsing result: {parsed_req}")
 
             if not parsed_req.get('status') == 'success':
                 logger.error(f"NLP parsing failed: {parsed_req}")
@@ -68,14 +73,16 @@ def generate_test_case():
             logger.info("Successfully parsed requirement through NLP")
 
         except Exception as e:
-            logger.error(f"Error in NLP parsing: {str(e)}")
+            logger.error(f"Error in NLP parsing: {str(e)}", exc_info=True)
             return jsonify({"error": f"NLP parsing error: {str(e)}"}), 500
 
         # Step 3: Generate test case using mapping agent
         try:
+            logger.debug(f"Sending to test case mapping agent: {parsed_req['parsed_requirement']}")
             test_case = test_case_mapping_agent.execute_task({
                 'requirement': parsed_req['parsed_requirement']
             })
+            logger.debug(f"Test case mapping result: {test_case}")
 
             if not test_case or 'test_case' not in test_case:
                 logger.error(f"Test case mapping failed: {test_case}")
@@ -86,25 +93,17 @@ def generate_test_case():
             # Format response
             response = {
                 "status": "success",
-                "test_case": {
-                    "title": test_case['test_case']['title'],
-                    "description": test_case['test_case']['description'],
-                    "format": {
-                        "given": test_case['test_case']['format']['given'],
-                        "when": test_case['test_case']['format']['when'],
-                        "then": test_case['test_case']['format']['then']
-                    }
-                }
+                "test_case": test_case['test_case']
             }
 
             return jsonify(response), 201
 
         except Exception as e:
-            logger.error(f"Error in test case mapping: {str(e)}")
+            logger.error(f"Error in test case mapping: {str(e)}", exc_info=True)
             return jsonify({"error": f"Test case generation error: {str(e)}"}), 500
 
     except Exception as e:
-        logger.error(f"General error in generate_test_case: {str(e)}")
+        logger.error(f"General error in generate_test_case: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @test_cases_bp.route('/test-cases/search', methods=['GET'])
