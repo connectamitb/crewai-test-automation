@@ -189,7 +189,7 @@ class WeaviateIntegration:
         """Search for test cases using semantic search"""
         try:
             self._lazy_init()  # Ensure client is initialized
-            self.logger.info(f"🔍 Searching test cases with query: {query}")
+            self.logger.info(f"Searching test cases with query: {query}")
 
             # First check if we have any test cases
             count_result = (
@@ -200,7 +200,7 @@ class WeaviateIntegration:
             )
 
             total_count = count_result.get("data", {}).get("Aggregate", {}).get("TestCase", [{}])[0].get("meta", {}).get("count", 0)
-            self.logger.info(f"📊 Total test cases in database: {total_count}")
+            self.logger.info(f"Total test cases in database: {total_count}")
 
             # Perform the search
             result = (
@@ -211,18 +211,16 @@ class WeaviateIntegration:
                 .do()
             )
 
-            self.logger.debug(f"Raw search response: {json.dumps(result, indent=2)}")
-
             if result and "data" in result and "Get" in result["data"]:
                 test_cases = result["data"]["Get"]["TestCase"]
-                self.logger.info(f"✅ Found {len(test_cases)} matching test cases")
+                self.logger.info(f"Found {len(test_cases)} matching test cases")
                 return test_cases
 
-            self.logger.warning("⚠️ No test cases found or invalid response format")
+            self.logger.warning("No test cases found")
             return []
 
         except Exception as e:
-            self.logger.error(f"❌ Failed to search test cases: {str(e)}", exc_info=True)
+            self.logger.error(f"Search error: {str(e)}")
             return []
 
     def get_test_case_by_name(self, name: str) -> Optional[Dict]:

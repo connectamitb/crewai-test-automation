@@ -171,29 +171,21 @@ class TestCaseMappingAgent(BaseAgent):
     def query_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search for test cases in memory and vector database"""
         try:
-            self.logger.info(f"🔍 Starting search for query: {query}")
+            self.logger.info(f"Searching for: {query}")
             matched_cases = []
 
             # Search in Weaviate
             try:
-                self.logger.info("📊 Attempting Weaviate search...")
                 weaviate_results = self.weaviate_client.search_test_cases(query, limit)
                 if weaviate_results:
-                    self.logger.info(f"✅ Found {len(weaviate_results)} results in Weaviate")
                     matched_cases.extend(weaviate_results)
-                else:
-                    self.logger.warning("⚠️ No results found in Weaviate")
             except Exception as e:
-                self.logger.error(f"❌ Error searching Weaviate: {str(e)}", exc_info=True)
+                self.logger.error(f"Weaviate search error: {str(e)}")
 
             # Search in memory as backup
-            self.logger.info("🔄 Searching in memory cache...")
             memory_results = self._search_memory(query, limit)
             if memory_results:
-                self.logger.info(f"✅ Found {len(memory_results)} results in memory")
                 matched_cases.extend(memory_results)
-            else:
-                self.logger.warning("⚠️ No results found in memory")
 
             # Deduplicate by title
             seen_titles = set()
@@ -204,11 +196,11 @@ class TestCaseMappingAgent(BaseAgent):
                     seen_titles.add(title)
                     unique_cases.append(case)
 
-            self.logger.info(f"✅ Returning {len(unique_cases)} unique test cases")
+            self.logger.info(f"Found {len(unique_cases)} unique test cases")
             return unique_cases[:limit]
 
         except Exception as e:
-            self.logger.error(f"❌ Error querying test cases: {str(e)}", exc_info=True)
+            self.logger.error(f"Query error: {str(e)}")
             return []
 
     def _search_memory(self, query: str, limit: int) -> List[Dict[str, Any]]:
