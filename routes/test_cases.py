@@ -4,6 +4,8 @@ from flask import Blueprint, request, jsonify
 from integrations.models import TestCase
 from integrations.weaviate_integration import WeaviateIntegration
 from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
+from agents.requirement_input import RequirementInputAgent, RequirementInput
+from agents.nlp_parsing import NLPParsingAgent
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -12,9 +14,11 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 test_cases_bp = Blueprint('test_cases', __name__)
 
-# Initialize integrations with error handling
+# Initialize agents and integrations
 weaviate_client = None
 zephyr_client = None
+requirement_agent = RequirementInputAgent()
+nlp_agent = NLPParsingAgent()
 
 def init_integrations():
     """Initialize integration clients"""
@@ -42,27 +46,40 @@ def ensure_integrations():
 
 @test_cases_bp.route('/test-cases', methods=['POST'])
 def create_test_case():
-    """Create a new test case and sync to both Weaviate and Zephyr Scale"""
+    """Create test cases from requirements and sync to both Weaviate and Zephyr Scale"""
     try:
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
 
+        # Process requirements through agents
+        requirement = RequirementInput(
+            raw_text=data.get("requirement_text", ""),
+            wireframe_paths=data.get("wireframe_paths", []),
+            project_key=data.get("project_key")
+        )
+
+        # Clean and parse requirements
+        cleaned_req = requirement_agent.clean_requirement(requirement)
+        parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
+
         # Create Weaviate test case
-        weaviate_test_case = TestCase(**data)
+        weaviate_test_case = TestCase(
+            name=parsed_test_case.name,
+            objective=parsed_test_case.objective,
+            precondition=parsed_test_case.precondition,
+            automation_needed=parsed_test_case.automation_needed,
+            steps=parsed_test_case.steps
+        )
         weaviate_id = weaviate_client.store_test_case(weaviate_test_case)
         logger.debug(f"Stored test case in Weaviate with ID: {weaviate_id}")
 
         # Create Zephyr test case
         zephyr_test_case = ZephyrTestCase(
-            name=data["name"],
-            objective=data["objective"],
-            precondition=data.get("precondition", ""),
-            steps=[{
-                "step": step["step"],
-                "test_data": step.get("test_data", ""),
-                "expected_result": step.get("expected_result", "")
-            } for step in data["steps"]],
+            name=parsed_test_case.name,
+            objective=parsed_test_case.objective,
+            precondition=parsed_test_case.precondition,
+            steps=parsed_test_case.steps,
             priority="Normal",
             labels=["automated", "weaviate-synced"]
         )
@@ -72,7 +89,8 @@ def create_test_case():
         return jsonify({
             "message": "Test case created successfully",
             "weaviate_id": weaviate_id,
-            "zephyr_key": zephyr_key
+            "zephyr_key": zephyr_key,
+            "parsed_test_case": parsed_test_case.dict()
         }), 201
 
     except Exception as e:
