@@ -146,3 +146,13 @@ pydantic
 weaviate-client
 pydantic
 weaviate-client
+weaviate-client
+pydantic
+pydantic
+weaviate-client
+flask==3.0.0
+pydantic==2.6.1
+python-dotenv
+pydantic>=2.8.0
+weaviate-client>=4.10.4
+weaviate-client

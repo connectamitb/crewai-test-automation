@@ -1,28 +1,11 @@
 """TestCaseMappingAgent implementation for generating formatted test cases."""
-import os
 import logging
 from typing import Dict, List, Optional, Any
-import json
-from pydantic import BaseModel
 
+from integrations.models import TestCase
 from .base_agent import BaseAgent, AgentConfig
 from integrations.weaviate_integration import WeaviateIntegration
 from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
-
-class TestCaseFormat(BaseModel):
-    """Model for test case format"""
-    given: List[str]
-    when: List[str]
-    then: List[str]
-    tags: Optional[List[str]] = None
-    priority: str = "Normal"
-
-class TestCaseOutput(BaseModel):
-    """Model for complete test case output"""
-    title: str
-    description: str
-    format: TestCaseFormat
-    metadata: Optional[Dict[str, Any]] = None
 
 class TestCaseMappingAgent(BaseAgent):
     """Agent responsible for mapping parsed requirements to formatted test cases"""
@@ -56,7 +39,7 @@ class TestCaseMappingAgent(BaseAgent):
 
             # Create test case based on requirement
             test_case = self._generate_test_case(requirement)
-            test_case_dict = test_case.model_dump()
+            test_case_dict = test_case.to_weaviate_format()
             self.logger.debug(f"Generated test case: {test_case_dict}")
 
             # Store locally for search
@@ -65,7 +48,7 @@ class TestCaseMappingAgent(BaseAgent):
             # Store in Weaviate
             weaviate_stored = False
             try:
-                weaviate_id = self.weaviate_client.store_test_case(test_case_dict)
+                weaviate_id = self.weaviate_client.store_test_case(test_case)
                 weaviate_stored = bool(weaviate_id)
                 self.logger.info(f"Stored test case in Weaviate: {weaviate_id}")
             except Exception as e:
@@ -78,14 +61,14 @@ class TestCaseMappingAgent(BaseAgent):
                 zephyr_test_case = ZephyrTestCase(
                     name=test_case.title,
                     objective=test_case.description,
-                    precondition="\n".join(test_case.format.given),
+                    precondition="\n".join(test_case.given),
                     steps=[{
                         "step": step,
                         "test_data": "",
                         "expected_result": expected
-                    } for step, expected in zip(test_case.format.when, test_case.format.then)],
-                    priority=test_case.format.priority,
-                    labels=test_case.format.tags
+                    } for step, expected in zip(test_case.when, test_case.then)],
+                    priority=test_case.priority,
+                    labels=test_case.tags
                 )
 
                 # Store in Zephyr
@@ -111,61 +94,57 @@ class TestCaseMappingAgent(BaseAgent):
             self.logger.error(f"Error in test case mapping: {str(e)}", exc_info=True)
             raise
 
-    def _generate_test_case(self, requirement: str) -> TestCaseOutput:
+    def _generate_test_case(self, requirement: str) -> TestCase:
         """Generate a test case based on requirement"""
         is_login = "login" in str(requirement).lower()
         return self._generate_login_test_case(requirement) if is_login else self._generate_generic_test_case(requirement)
 
-    def _generate_login_test_case(self, requirement: str) -> TestCaseOutput:
+    def _generate_login_test_case(self, requirement: str) -> TestCase:
         """Generate a login-specific test case"""
-        return TestCaseOutput(
+        return TestCase(
             title="Test: Login Functionality",
             description=str(requirement),
-            format=TestCaseFormat(
-                given=[
-                    "User is on the login page",
-                    "User has valid credentials",
-                    "System is accessible"
-                ],
-                when=[
-                    "User enters valid username",
-                    "User enters valid password",
-                    "User clicks the login button"
-                ],
-                then=[
-                    "User is successfully authenticated",
-                    "User is redirected to dashboard",
-                    "Success message is displayed"
-                ],
-                tags=["authentication", "login", "critical-path", "smoke-test"],
-                priority="high"
-            )
+            given=[
+                "User is on the login page",
+                "User has valid credentials",
+                "System is accessible"
+            ],
+            when=[
+                "User enters valid username",
+                "User enters valid password",
+                "User clicks the login button"
+            ],
+            then=[
+                "User is successfully authenticated",
+                "User is redirected to dashboard",
+                "Success message is displayed"
+            ],
+            tags=["authentication", "login", "critical-path", "smoke-test"],
+            priority="high"
         )
 
-    def _generate_generic_test_case(self, requirement: str) -> TestCaseOutput:
+    def _generate_generic_test_case(self, requirement: str) -> TestCase:
         """Generate a generic test case"""
-        return TestCaseOutput(
+        return TestCase(
             title=f"Test: {str(requirement)[:50]}",
             description=str(requirement),
-            format=TestCaseFormat(
-                given=[
-                    "User is logged into the system",
-                    "Required permissions are granted",
-                    "System is in a known good state"
-                ],
-                when=[
-                    "User navigates to the required page",
-                    "User performs the necessary actions",
-                    "User submits the changes"
-                ],
-                then=[
-                    "Operation completes successfully",
-                    "Expected results are verified",
-                    "System state is updated correctly"
-                ],
-                tags=["functional", "regression"],
-                priority="medium"
-            )
+            given=[
+                "User is logged into the system",
+                "Required permissions are granted",
+                "System is in a known good state"
+            ],
+            when=[
+                "User navigates to the required page",
+                "User performs the necessary actions",
+                "User submits the changes"
+            ],
+            then=[
+                "Operation completes successfully",
+                "Expected results are verified",
+                "System state is updated correctly"
+            ],
+            tags=["functional", "regression"],
+            priority="medium"
         )
 
     def query_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
