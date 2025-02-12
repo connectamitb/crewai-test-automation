@@ -5,6 +5,7 @@ import os
 import json
 import requests
 from pydantic import BaseModel
+from itertools import zip_longest
 
 from .base_agent import BaseAgent, AgentConfig
 
@@ -79,12 +80,19 @@ class TestCaseMappingAgent(BaseAgent):
 
             # Add test steps (When + Then)
             steps = []
-            for step, expected in zip(test_case["format"]["when"], test_case["format"]["then"]):
-                steps.append({
-                    "description": step,
-                    "expectedResult": expected,
-                    "testData": ""
-                })
+            # Ensure we have both when and then steps
+            when_steps = test_case["format"].get("when", [])
+            then_steps = test_case["format"].get("then", [])
+
+            # Use zip_longest to handle cases where there might be more when steps than then steps or vice versa
+            for when_step, then_step in zip_longest(when_steps, then_steps, fillvalue=""):
+                step = {
+                    "description": when_step,
+                    "expectedResult": then_step,
+                    "testData": ""  # Can be populated with actual test data if available
+                }
+                steps.append(step)
+
             zephyr_test_case["steps"] = steps
 
             # Add labels if tags exist

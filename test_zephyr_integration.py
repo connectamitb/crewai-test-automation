@@ -13,16 +13,28 @@ def test_create_simple_test_case():
         # Initialize the agent
         agent = TestCaseMappingAgent()
 
-        # Create a minimal test case
+        # Create a test case with multiple steps
         test_case = TestCaseOutput(
-            title="Simple Login Test",
-            description="Test basic login functionality",
+            title="Login Functionality Test",
+            description="Verify user can successfully log in with valid credentials and appropriate error messages are shown for invalid attempts",
             format=TestCaseFormat(
-                given=["User is on the login page"],
-                when=["User enters valid credentials"],
-                then=["User is logged in successfully"],
-                tags=["test", "login"],
-                priority="Normal"  # Updated to use Normal priority
+                given=[
+                    "User is on the login page",
+                    "User has valid credentials",
+                    "System is accessible"
+                ],
+                when=[
+                    "User enters a valid username",
+                    "User enters a valid password",
+                    "User clicks the login button"
+                ],
+                then=[
+                    "Username field accepts the input",
+                    "Password field accepts the input",
+                    "User is successfully logged in and redirected to dashboard"
+                ],
+                tags=["test", "login", "authentication"],
+                priority="Normal"
             )
         )
 
