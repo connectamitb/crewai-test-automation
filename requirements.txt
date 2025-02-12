@@ -156,3 +156,4 @@ python-dotenv
 pydantic>=2.8.0
 weaviate-client>=4.10.4
 weaviate-client
+weaviate-client

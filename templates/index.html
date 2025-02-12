@@ -520,36 +520,57 @@ Acceptance Criteria:
     }
 
     function createResultCard(testCase) {
-      const card = document.createElement('div');
-      card.className = 'bg-gray-50 p-4 rounded-lg';
-      card.innerHTML = `
-        <div class="flex justify-between items-start">
-          <h4 class="font-semibold text-lg">${testCase.name || testCase.title || 'Untitled Test Case'}</h4>
-        </div>
-        <p class="text-gray-600 mt-1">${testCase.objective || testCase.description || 'No description provided'}</p>
-        ${testCase.precondition ? `
-          <div class="mt-2">
-            <h5 class="font-medium">Precondition:</h5>
-            <p class="text-gray-600">${testCase.precondition}</p>
-          </div>
-        ` : ''}
-        ${testCase.steps ? `
-          <div class="mt-2">
-            <h5 class="font-medium">Steps:</h5>
-            <ol class="list-decimal list-inside">
-              ${(testCase.steps.map(step => `
-                <li class="mt-1">
-                  ${step.step || step}
-                  ${step.test_data ? `<br><span class="text-sm text-gray-500">Test Data: ${step.test_data}</span>` : ''}
-                  ${step.expected_result ? `<br><span class="text-sm text-green-600">Expected: ${step.expected_result}</span>` : ''}
-                </li>
-              `).join('') || '<li>No steps found.</li>')}
-            </ol>
-          </div>
-        ` : ''}
-      `;
-      return card;
-    }
+            const card = document.createElement('div');
+            card.className = 'bg-gray-50 p-4 rounded-lg border border-gray-200 hover:shadow-lg transition-shadow';
+            card.innerHTML = `
+              <div class="space-y-4">
+                <div class="flex justify-between items-start">
+                  <h4 class="font-semibold text-lg text-blue-600">${testCase.title || 'Untitled Test Case'}</h4>
+                  <span class="px-2 py-1 text-sm rounded ${testCase.metadata?.priority === 'high' ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-800'}">
+                    Priority: ${testCase.metadata?.priority || 'Normal'}
+                  </span>
+                </div>
+
+                <div class="mt-2">
+                  <h5 class="font-medium text-gray-700">Description:</h5>
+                  <p class="text-gray-600">${testCase.description || 'No description provided'}</p>
+                </div>
+
+                ${testCase.format ? `
+                  <div class="mt-4 space-y-4">
+                    <div>
+                      <h5 class="font-medium text-gray-700">Given:</h5>
+                      <ul class="list-disc list-inside text-gray-600 ml-4">
+                        ${testCase.format.given.map(item => `<li>${item}</li>`).join('')}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h5 class="font-medium text-gray-700">When:</h5>
+                      <ul class="list-disc list-inside text-gray-600 ml-4">
+                        ${testCase.format.when.map(item => `<li>${item}</li>`).join('')}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h5 class="font-medium text-gray-700">Then:</h5>
+                      <ul class="list-disc list-inside text-gray-600 ml-4">
+                        ${testCase.format.then.map(item => `<li>${item}</li>`).join('')}
+                      </ul>
+                    </div>
+                  </div>
+                ` : ''}
+
+                ${testCase.metadata?.tags ? `
+                  <div class="mt-4">
+                    <h5 class="font-medium text-gray-700">Tags:</h5>
+                    <div class="flex flex-wrap gap-2 mt-2">
+                      ${testCase.metadata.tags.map(tag => 
+                        `<span class="px-2 py-1 text-sm bg-blue-100 text-blue-800 rounded-full">${tag}</span>`
+                      ).join('')}
+                    </div>
+                  </div>
+                ` : ''}}
 
     // Authentication handling (retained from original)
     const firebaseConfig = {
