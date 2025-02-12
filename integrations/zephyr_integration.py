@@ -23,23 +23,19 @@ class ZephyrIntegration:
         self.project_key = os.environ.get("ZEPHYR_PROJECT_KEY", "QADEMO")
         self.base_url = "https://api.zephyrscale.smartbear.com/v2"
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
 
         if not self.api_key:
             self.logger.warning("ZEPHYR_API_KEY not set in environment variables")
 
     def create_test_case(self, test_case: ZephyrTestCase) -> Optional[str]:
-        """Create a test case in Zephyr Scale
-        
-        Args:
-            test_case: Test case data to create
-            
-        Returns:
-            str: Test case key if successful, None otherwise
-        """
+        """Create a test case in Zephyr Scale"""
         try:
             if not self.api_key:
                 self.logger.error("Cannot create test case: ZEPHYR_API_KEY not set")
                 return None
+
+            self.logger.debug(f"Creating test case in Zephyr Scale: {test_case.name}")
 
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -49,11 +45,13 @@ class ZephyrIntegration:
             # Format steps for Zephyr Scale
             formatted_steps = []
             for step in test_case.steps:
-                formatted_steps.append({
+                formatted_step = {
                     "description": step.get("step", ""),
                     "testData": step.get("test_data", ""),
                     "expectedResult": step.get("expected_result", "")
-                })
+                }
+                self.logger.debug(f"Formatted step: {formatted_step}")
+                formatted_steps.append(formatted_step)
 
             payload = {
                 "projectKey": self.project_key,
@@ -70,11 +68,17 @@ class ZephyrIntegration:
             if test_case.labels:
                 payload["labels"] = test_case.labels
 
+            self.logger.debug(f"Sending request to Zephyr Scale: {payload}")
+
             response = requests.post(
                 f"{self.base_url}/testcases",
                 headers=headers,
-                json=payload
+                json=payload,
+                timeout=30
             )
+
+            self.logger.debug(f"Zephyr Scale response status: {response.status_code}")
+            self.logger.debug(f"Zephyr Scale response body: {response.text}")
 
             if response.status_code in (200, 201):
                 result = response.json()
@@ -84,6 +88,9 @@ class ZephyrIntegration:
                 self.logger.error(f"Failed to create test case in Zephyr Scale: {response.text}")
                 return None
 
+        except requests.exceptions.RequestException as e:
+            self.logger.error(f"Network error creating test case in Zephyr Scale: {str(e)}")
+            return None
         except Exception as e:
             self.logger.error(f"Error creating test case in Zephyr Scale: {str(e)}")
             return None
