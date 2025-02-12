@@ -24,6 +24,11 @@ def generate_test_case():
     """Generate and store test cases from requirements"""
     try:
         logger.info("Received request to generate test case")
+
+        if not request.is_json:
+            logger.error("Request content type is not application/json")
+            return jsonify({"error": "Content type must be application/json"}), 400
+
         data = request.get_json()
         logger.debug(f"Received data: {data}")
 
@@ -116,49 +121,43 @@ def search_test_cases():
         if not query:
             return jsonify({"error": "Search query is required"}), 400
 
-        logger.info(f"🔍 Received search request with query: {query}")
+        logger.info(f"Received search request with query: {query}")
 
         # Initialize Weaviate client if not already initialized
-        if not weaviate_client:
-            logger.info("📝 Initializing Weaviate client for search...")
-            init_integrations()
-
-        if not weaviate_client:
-            logger.error("❌ Failed to initialize Weaviate client")
-            return jsonify({"error": "Search service unavailable"}), 503
+        weaviate_client = WeaviateIntegration()
 
         # Search using the test case mapping agent which handles both vector and memory search
-        logger.info("🔄 Executing search using test case mapping agent...")
+        logger.info("Executing search using test case mapping agent...")
         results = test_case_mapping_agent.query_test_cases(query)
 
-        logger.info(f"✅ Found {len(results)} test cases matching query: {query}")
+        logger.info(f"Found {len(results)} test cases matching query: {query}")
         logger.debug(f"Search results: {results}")
 
         return jsonify({
+            "status": "success",
             "results": results,
             "total": len(results)
         }), 200
 
     except Exception as e:
-        logger.error(f"❌ Error searching test cases: {str(e)}", exc_info=True)
+        logger.error(f"Error searching test cases: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @test_cases_bp.route('/test-cases/<name>', methods=['GET'])
 def get_test_case(name):
     """Get a test case by name"""
     try:
-        if not weaviate_client:
-            return jsonify({"error": "Integration not initialized"}), 503
-
+        weaviate_client = WeaviateIntegration()
         result = weaviate_client.get_test_case_by_name(name)
+
         if result is None:
             return jsonify({"error": "Test case not found"}), 404
 
-        return jsonify(result), 200
+        return jsonify({"status": "success", "test_case": result}), 200
 
     except Exception as e:
         logger.error(f"Error retrieving test case: {str(e)}")
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e)}), 500
 
 def init_integrations():
     """Initialize integration clients"""
