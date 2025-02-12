@@ -1,9 +1,8 @@
 """Main application entry point."""
 import os
 import logging
-from flask import Flask, render_template
+from flask import Flask, render_template, jsonify
 from dotenv import load_dotenv
-from routes.test_cases import test_cases_bp, init_integrations
 
 # Configure logging
 logging.basicConfig(
@@ -22,15 +21,8 @@ def create_app():
         app = Flask(__name__)
         app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_key")
 
-        # Initialize integrations - but don't fail if they're not ready
-        try:
-            init_integrations()
-            logger.info("Successfully initialized integrations")
-        except Exception as e:
-            logger.warning(f"Failed to initialize integrations: {str(e)}")
-            # Continue anyway - integrations will be initialized on first request
-
         # Register blueprints
+        from routes.test_cases import test_cases_bp
         app.register_blueprint(test_cases_bp, url_prefix='/api/v1')
 
         @app.route('/')
@@ -40,11 +32,11 @@ def create_app():
 
         @app.errorhandler(404)
         def not_found(error):
-            return {"error": "Not found"}, 404
+            return jsonify({"error": "Not found"}), 404
 
         @app.errorhandler(500)
         def server_error(error):
-            return {"error": "Internal server error"}, 500
+            return jsonify({"error": "Internal server error"}), 500
 
         return app
 
@@ -52,6 +44,7 @@ def create_app():
         logger.error(f"Failed to initialize Flask app: {str(e)}")
         raise
 
+# Create the Flask application instance
 app = create_app()
 
 if __name__ == '__main__':

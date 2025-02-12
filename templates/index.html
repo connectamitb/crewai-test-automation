@@ -490,7 +490,7 @@ Acceptance Criteria:
         //const source = document.getElementById('searchSource').value; // Removed as not present in original
 
         try {
-          const response = await fetch(`/api/v1/test-cases/search?q=${encodeURIComponent(query)}`); //modified fetch URL
+          const response = await fetch(`/api/v1/test-cases/search?q=${encodeURIComponent(query)}`);
           const result = await response.json();
 
           if (!response.ok) {
@@ -519,7 +519,7 @@ Acceptance Criteria:
       });
     }
 
-    function createResultCard(testCase) { //Simplified createResultCard
+    function createResultCard(testCase) {
       const card = document.createElement('div');
       card.className = 'bg-gray-50 p-4 rounded-lg';
       card.innerHTML = `
@@ -573,9 +573,9 @@ Acceptance Criteria:
         logoutBtn.classList.remove('hidden');
       } else {
         loginBtn.classList.remove('hidden');
-        logoutBtn.classList.add('hidden');
-      }
+        logoutBtn.classList.add('hidden');      }
     });
   </script>
-</body>
+
+  </body>
 </html>

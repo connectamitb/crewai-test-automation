@@ -2,8 +2,6 @@
 import logging
 from flask import Blueprint, request, jsonify
 from testai.agents.test_case_mapping import TestCaseMappingAgent
-from testai.agents.requirement_input import RequirementInputAgent, RequirementInput
-from testai.agents.nlp_parsing import NLPParsingAgent
 from integrations.weaviate_integration import WeaviateIntegration
 from integrations.zephyr_integration import ZephyrIntegration
 
@@ -15,8 +13,6 @@ logger = logging.getLogger(__name__)
 test_cases_bp = Blueprint('test_cases', __name__)
 
 # Initialize agents
-requirement_agent = RequirementInputAgent()
-nlp_agent = NLPParsingAgent()
 test_case_mapping_agent = TestCaseMappingAgent()
 
 @test_cases_bp.route('/test-cases', methods=['POST'])
@@ -39,62 +35,19 @@ def generate_test_case():
         requirement_text = data['requirement']
         logger.info(f"Processing requirement: {requirement_text}")
 
-        # Step 1: Process requirement through requirement agent
+        # Generate test case using the mapping agent
         try:
-            requirement = RequirementInput(
-                raw_text=requirement_text,
-                project_key=data.get('project_key')
-            )
-            logger.debug(f"Created requirement input: {requirement}")
-
-            processed_req = requirement_agent.execute_task({
-                'raw_text': requirement.raw_text,
-                'project_key': requirement.project_key
-            })
-            logger.debug(f"Processed requirement result: {processed_req}")
-
-            if not processed_req.get('status') == 'success':
-                logger.error(f"Requirement processing failed: {processed_req}")
-                return jsonify({"error": "Failed to process requirement"}), 400
-
-            logger.info("Successfully processed requirement")
-
-        except Exception as e:
-            logger.error(f"Error in requirement processing: {str(e)}", exc_info=True)
-            return jsonify({"error": f"Requirement processing error: {str(e)}"}), 500
-
-        # Step 2: Parse requirement through NLP agent
-        try:
-            logger.debug(f"Sending to NLP agent: {processed_req['processed_requirement']['text']}")
-            parsed_req = nlp_agent.execute_task({
-                'cleaned_requirement': processed_req['processed_requirement']['text']
-            })
-            logger.debug(f"NLP parsing result: {parsed_req}")
-
-            if not parsed_req.get('status') == 'success':
-                logger.error(f"NLP parsing failed: {parsed_req}")
-                return jsonify({"error": "Failed to parse requirement"}), 400
-
-            logger.info("Successfully parsed requirement through NLP")
-
-        except Exception as e:
-            logger.error(f"Error in NLP parsing: {str(e)}", exc_info=True)
-            return jsonify({"error": f"NLP parsing error: {str(e)}"}), 500
-
-        # Step 3: Generate test case using mapping agent
-        try:
-            logger.debug(f"Sending to test case mapping agent: {parsed_req['parsed_requirement']}")
             test_case = test_case_mapping_agent.execute_task({
-                'requirement': parsed_req['parsed_requirement']
+                'requirement': {
+                    'description': requirement_text,
+                    'project_key': data.get('project_key')
+                }
             })
             logger.debug(f"Test case mapping result: {test_case}")
 
             if not test_case or 'test_case' not in test_case:
                 logger.error(f"Test case mapping failed: {test_case}")
                 return jsonify({"error": "Failed to generate test case"}), 500
-
-            logger.info("Successfully generated test case")
-            logger.info(f"Storage status: {test_case.get('storage', {})}")
 
             # Format response
             response = {
@@ -106,7 +59,7 @@ def generate_test_case():
             return jsonify(response), 201
 
         except Exception as e:
-            logger.error(f"Error in test case mapping: {str(e)}", exc_info=True)
+            logger.error(f"Error in test case generation: {str(e)}", exc_info=True)
             return jsonify({"error": f"Test case generation error: {str(e)}"}), 500
 
     except Exception as e:
@@ -148,7 +101,7 @@ def get_test_case(name):
     """Get a test case by name"""
     try:
         weaviate_client = WeaviateIntegration()
-        result = weaviate_client.get_test_case_by_name(name)
+        result = weaviate_client.get_test_case(name)
 
         if result is None:
             return jsonify({"error": "Test case not found"}), 404
@@ -158,27 +111,3 @@ def get_test_case(name):
     except Exception as e:
         logger.error(f"Error retrieving test case: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
-def init_integrations():
-    """Initialize integration clients"""
-    global weaviate_client, zephyr_client
-
-    logger.info("Initializing integrations...")
-    try:
-        # Initialize Weaviate
-        weaviate_client = WeaviateIntegration()
-        logger.info("Successfully initialized Weaviate integration")
-
-        # Initialize Zephyr Scale
-        zephyr_client = ZephyrIntegration()
-        logger.info("Successfully initialized Zephyr integration")
-
-        return True
-    except Exception as e:
-        logger.error(f"Error initializing integrations: {str(e)}")
-        return False
-
-# Initialize integrations at module load
-weaviate_client = None
-zephyr_client = None
-init_integrations()
