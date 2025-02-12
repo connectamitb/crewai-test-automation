@@ -445,79 +445,87 @@ Acceptance Criteria:
 
     // Form Submit Handler
     document.getElementById('testCaseForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
+        e.preventDefault();
 
-      // Show loading state
-      const submitButton = e.target.querySelector('button[type="submit"]');
-      const originalText = submitButton.textContent;
-      submitButton.textContent = 'Generating Test Case...';
-      submitButton.disabled = true;
+        // Show loading state
+        const submitButton = e.target.querySelector('button[type="submit"]');
+        const originalText = submitButton.textContent;
+        submitButton.textContent = 'Generating Test Case...';
+        submitButton.disabled = true;
 
-      try {
-        const requirementText = document.getElementById('requirementText').value;
-        const projectKey = document.getElementById('projectKey').value;
+        try {
+            const requirementText = document.getElementById('requirementText').value;
+            const projectKey = document.getElementById('projectKey').value;
 
-        // Create request payload
-        const requestData = {
-          requirement_text: requirementText,
-          project_key: projectKey
-        };
+            // Create request payload
+            const requestData = {
+                requirement: requirementText,
+                project_key: projectKey
+            };
 
-        // Create test case
-        const response = await fetch('/api/v1/test-cases', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestData)
-        });
+            // Create test case
+            const response = await fetch('/api/v1/test-cases', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
 
-        const result = await response.json();
+            const result = await response.json();
 
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to create test case');
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to create test case');
+            }
+
+            // Display the test case results
+            const resultSection = document.getElementById('testCaseResults');
+            resultSection.classList.remove('hidden');
+
+            // Update result fields
+            document.getElementById('resultName').textContent = result.test_case.title;
+            document.getElementById('resultObjective').textContent = result.test_case.description;
+            document.getElementById('resultPrecondition').textContent = result.test_case.format.given.join('\n');
+
+            // Update steps
+            const stepsList = document.getElementById('resultSteps');
+            stepsList.innerHTML = '';
+
+            result.test_case.format.when.forEach((step, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="ml-4">
+                        <p class="font-medium">Step: ${step}</p>
+                        <p class="text-green-600">Expected Result: ${result.test_case.format.then[index]}</p>
+                    </div>
+                `;
+                stepsList.appendChild(li);
+            });
+
+            // Update storage status
+            if (result.storage_status) {
+                const storageInfo = document.createElement('div');
+                storageInfo.innerHTML = `
+                    <div class="mt-4 pt-4 border-t">
+                        <h4 class="font-semibold">Storage Status:</h4>
+                        <p>Memory Storage: ${result.storage_status.memory ? '✅' : '❌'}</p>
+                        <p>Zephyr Scale: ${result.storage_status.zephyr ? '✅' : '❌'}</p>
+                    </div>
+                `;
+                stepsList.parentElement.appendChild(storageInfo);
+            }
+
+            // Scroll to results
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error creating test case: ' + error.message);
+        } finally {
+            // Reset button state
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
         }
-
-        // Display the test case results
-        const resultSection = document.getElementById('testCaseResults');
-        resultSection.classList.remove('hidden');
-
-        // Update result fields
-        document.getElementById('resultName').textContent = result.parsed_test_case.name;
-        document.getElementById('resultObjective').textContent = result.parsed_test_case.objective;
-        document.getElementById('resultPrecondition').textContent = result.parsed_test_case.precondition || 'None';
-        document.getElementById('resultAutomation').textContent = result.parsed_test_case.automation_needed;
-
-        // Update steps
-        const stepsList = document.getElementById('resultSteps');
-        stepsList.innerHTML = '';
-        result.parsed_test_case.steps.forEach(step => {
-          const li = document.createElement('li');
-          li.innerHTML = `
-            <div class="ml-4">
-              <p class="font-medium">Step: ${step.step}</p>
-              ${step.test_data ? `<p class="text-gray-600">Test Data: ${step.test_data}</p>` : ''}
-              <p class="text-green-600">Expected Result: ${step.expected_result}</p>
-            </div>
-          `;
-          stepsList.appendChild(li);
-        });
-
-        // Update IDs
-        document.getElementById('weaviateId').textContent = result.weaviate_id;
-        document.getElementById('zephyrKey').textContent = result.zephyr_key;
-
-        // Scroll to results
-        resultSection.scrollIntoView({ behavior: 'smooth' });
-
-      } catch (error) {
-        console.error('Error:', error);
-        alert('Error creating test case: ' + error.message);
-      } finally {
-        // Reset button state
-        submitButton.textContent = originalText;
-        submitButton.disabled = false;
-      }
     });
 
     // Search Form Handler
@@ -569,8 +577,8 @@ Acceptance Criteria:
       card.className = 'bg-gray-50 p-4 rounded-lg';
       card.innerHTML = `
         <div class="flex justify-between items-start">
-          <h4 class="font-semibold text-lg">${testCase.name}</h4>
-          <span class="bg-blue-100 text-blue800 text-xs px-2 py-1 rounded">${source}</span>
+          <h4 class="font-semiboldtext-lg">${testCase.name}</h4>
+          <span class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded">${source}</span>
         </div>
         <p class="text-gray-600 mt-1">${testCase.objective}</p>
         ${testCase.precondition ? `
@@ -704,79 +712,87 @@ Acceptance Criteria:
 
     // Form Submit Handler
     document.getElementById('testCaseForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
+        e.preventDefault();
 
-      // Show loading state
-      const submitButton = e.target.querySelector('button[type="submit"]');
-      const originalText = submitButton.textContent;
-      submitButton.textContent = 'Generating Test Case...';
-      submitButton.disabled = true;
+        // Show loading state
+        const submitButton = e.target.querySelector('button[type="submit"]');
+        const originalText = submitButton.textContent;
+        submitButton.textContent = 'Generating Test Case...';
+        submitButton.disabled = true;
 
-      try {
-        const requirementText = document.getElementById('requirementText').value;
-        const projectKey = document.getElementById('projectKey').value;
+        try {
+            const requirementText = document.getElementById('requirementText').value;
+            const projectKey = document.getElementById('projectKey').value;
 
-        // Create request payload
-        const requestData = {
-          requirement_text: requirementText,
-          project_key: projectKey
-        };
+            // Create request payload
+            const requestData = {
+                requirement: requirementText,
+                project_key: projectKey
+            };
 
-        // Create test case
-        const response = await fetch('/api/v1/test-cases', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestData)
-        });
+            // Create test case
+            const response = await fetch('/api/v1/test-cases', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+            });
 
-        const result = await response.json();
+            const result = await response.json();
 
-        if (!response.ok) {
-          throw new Error(result.error || 'Failed to create test case');
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to create test case');
+            }
+
+            // Display the test case results
+            const resultSection = document.getElementById('testCaseResults');
+            resultSection.classList.remove('hidden');
+
+            // Update result fields
+            document.getElementById('resultName').textContent = result.test_case.title;
+            document.getElementById('resultObjective').textContent = result.test_case.description;
+            document.getElementById('resultPrecondition').textContent = result.test_case.format.given.join('\n');
+
+            // Update steps
+            const stepsList = document.getElementById('resultSteps');
+            stepsList.innerHTML = '';
+
+            result.test_case.format.when.forEach((step, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <div class="ml-4">
+                        <p class="font-medium">Step: ${step}</p>
+                        <p class="text-green-600">Expected Result: ${result.test_case.format.then[index]}</p>
+                    </div>
+                `;
+                stepsList.appendChild(li);
+            });
+
+            // Update storage status
+            if (result.storage_status) {
+                const storageInfo = document.createElement('div');
+                storageInfo.innerHTML = `
+                    <div class="mt-4 pt-4 border-t">
+                        <h4 class="font-semibold">Storage Status:</h4>
+                        <p>Memory Storage: ${result.storage_status.memory ? '✅' : '❌'}</p>
+                        <p>Zephyr Scale: ${result.storage_status.zephyr ? '✅' : '❌'}</p>
+                    </div>
+                `;
+                stepsList.parentElement.appendChild(storageInfo);
+            }
+
+            // Scroll to results
+            resultSection.scrollIntoView({ behavior: 'smooth' });
+
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error creating test case: ' + error.message);
+        } finally {
+            // Reset button state
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
         }
-
-        // Display the test case results
-        const resultSection = document.getElementById('testCaseResults');
-        resultSection.classList.remove('hidden');
-
-        // Update result fields
-        document.getElementById('resultName').textContent = result.parsed_test_case.name;
-        document.getElementById('resultObjective').textContent = result.parsed_test_case.objective;
-        document.getElementById('resultPrecondition').textContent = result.parsed_test_case.precondition || 'None';
-        document.getElementById('resultAutomation').textContent = result.parsed_test_case.automation_needed;
-
-        // Update steps
-        const stepsList = document.getElementById('resultSteps');
-        stepsList.innerHTML = '';
-        result.parsed_test_case.steps.forEach(step => {
-          const li = document.createElement('li');
-          li.innerHTML = `
-            <div class="ml-4">
-              <p class="font-medium">Step: ${step.step}</p>
-              ${step.test_data ? `<p class="text-gray-600">Test Data: ${step.test_data}</p>` : ''}
-              <p class="text-green-600">Expected Result: ${step.expected_result}</p>
-            </div>
-          `;
-          stepsList.appendChild(li);
-        });
-
-        // Update IDs
-        document.getElementById('weaviateId').textContent = result.weaviate_id;
-        document.getElementById('zephyrKey').textContent = result.zephyr_key;
-
-        // Scroll to results
-        resultSection.scrollIntoView({ behavior: 'smooth' });
-
-      } catch (error) {
-        console.error('Error:', error);
-        alert('Error creating test case: ' + error.message);
-      } finally {
-        // Reset button state
-        submitButton.textContent = originalText;
-        submitButton.disabled = false;
-      }
     });
 
     // Search Form Handler

@@ -4,8 +4,6 @@ from flask import Blueprint, request, jsonify
 from testai.agents.test_case_mapping import TestCaseMappingAgent
 from testai.agents.requirement_input import RequirementInputAgent, RequirementInput
 from testai.agents.nlp_parsing import NLPParsingAgent
-from integrations.weaviate_integration import WeaviateIntegration
-from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -14,12 +12,12 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 test_cases_bp = Blueprint('test_cases', __name__)
 
-# Initialize agents and integrations
+# Initialize agents
 requirement_agent = RequirementInputAgent()
 nlp_agent = NLPParsingAgent()
 test_case_mapping_agent = TestCaseMappingAgent()
 
-@test_cases_bp.route('/generate-test-case', methods=['POST'])
+@test_cases_bp.route('/test-cases', methods=['POST'])
 def generate_test_case():
     """Generate and store test cases from requirements"""
     try:
@@ -89,11 +87,13 @@ def generate_test_case():
                 return jsonify({"error": "Failed to generate test case"}), 500
 
             logger.info("Successfully generated test case")
+            logger.info(f"Storage status: {test_case.get('storage', {})}")
 
             # Format response
             response = {
                 "status": "success",
-                "test_case": test_case['test_case']
+                "test_case": test_case['test_case'],
+                "storage_status": test_case.get('storage', {})
             }
 
             return jsonify(response), 201
@@ -108,7 +108,7 @@ def generate_test_case():
 
 @test_cases_bp.route('/test-cases/search', methods=['GET'])
 def search_test_cases():
-    """Search for test cases using vector similarity search"""
+    """Search for test cases using in-memory search"""
     try:
         query = request.args.get('q', '')
         if not query:
