@@ -51,11 +51,13 @@ def ensure_integrations():
 def create_test_case():
     """Create test cases from requirements and sync to both Weaviate and Zephyr Scale"""
     try:
+        logger.info("Received request to create test case")
         data = request.get_json()
         if not data:
+            logger.error("No data provided in request")
             return jsonify({"error": "No data provided"}), 400
 
-        logger.info("Processing test case creation request")
+        logger.info(f"Processing test case creation request with data: {data}")
 
         # Process requirements through agents
         requirement = RequirementInput(
@@ -65,12 +67,16 @@ def create_test_case():
         )
 
         # Clean and parse requirements
+        logger.debug("Cleaning requirement...")
         cleaned_req = requirement_agent.clean_requirement(requirement)
-        parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
+        logger.debug(f"Cleaned requirement: {cleaned_req}")
 
-        logger.debug(f"Created parsed test case: {parsed_test_case.dict()}")
+        logger.debug("Parsing requirement...")
+        parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
+        logger.debug(f"Parsed test case: {parsed_test_case}")
 
         # Create Weaviate test case
+        logger.info("Creating Weaviate test case...")
         weaviate_test_case = TestCase(
             name=parsed_test_case.name,
             objective=parsed_test_case.objective,
@@ -82,6 +88,7 @@ def create_test_case():
         logger.info(f"Stored test case in Weaviate with ID: {weaviate_id}")
 
         # Create Zephyr test case
+        logger.info("Creating Zephyr test case...")
         zephyr_test_case = ZephyrTestCase(
             name=parsed_test_case.name,
             objective=parsed_test_case.objective,
@@ -93,15 +100,17 @@ def create_test_case():
         zephyr_key = zephyr_client.create_test_case(zephyr_test_case)
         logger.info(f"Stored test case in Zephyr Scale with key: {zephyr_key}")
 
-        return jsonify({
+        response_data = {
             "message": "Test case created successfully",
             "weaviate_id": weaviate_id,
             "zephyr_key": zephyr_key,
             "parsed_test_case": parsed_test_case.dict()
-        }), 201
+        }
+        logger.info(f"Sending response: {response_data}")
+        return jsonify(response_data), 201
 
     except Exception as e:
-        logger.error(f"Error creating test case: {str(e)}")
+        logger.error(f"Error creating test case: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 400
 
 @test_cases_bp.route('/test-cases/search', methods=['GET'])
