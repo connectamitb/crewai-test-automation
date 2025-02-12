@@ -59,127 +59,78 @@
   <section class="py-12">
     <div class="max-w-7xl mx-auto px-4">
       <div class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-2xl font-bold mb-4">Create Test Case</h2>
+        <h2 class="text-2xl font-bold mb-4">Create Test Case from Requirements</h2>
         <form id="testCaseForm" class="space-y-4">
           <div>
-            <label class="block text-gray-700 mb-2">Test Case Name</label>
+            <label class="block text-gray-700 mb-2">Test Requirements</label>
+            <textarea 
+              id="requirementText" 
+              name="requirement_text" 
+              rows="6" 
+              class="w-full border rounded p-2"
+              required
+              placeholder="Format your requirements as follows:
+
+Test Title
+Description: Describe the feature or functionality to be tested.
+
+Prerequisites:
+- List any required setup or conditions
+- One prerequisite per line
+
+Acceptance Criteria:
+- List specific criteria that must be met
+- One criteria per line"
+            ></textarea>
+          </div>
+
+          <div>
+            <label class="block text-gray-700 mb-2">Project Key</label>
             <input 
               type="text" 
-              id="name" 
-              name="name" 
+              id="projectKey" 
+              name="project_key" 
               class="w-full border rounded p-2"
-              required
-              placeholder="Enter test case name"
+              placeholder="Enter project identifier (e.g., TEST-123)"
             />
           </div>
+
           <div>
-            <label class="block text-gray-700 mb-2">Objective</label>
-            <textarea 
-              id="objective" 
-              name="objective" 
-              rows="3" 
+            <label class="block text-gray-700 mb-2">Upload Wireframes (Optional)</label>
+            <input 
+              type="file" 
+              id="wireframes" 
+              name="wireframes" 
+              multiple
               class="w-full border rounded p-2"
-              required
-              placeholder="Describe the test case objective"
-            ></textarea>
+              accept="image/*,.pdf"
+            />
           </div>
-          <div>
-            <label class="block text-gray-700 mb-2">Precondition</label>
-            <textarea 
-              id="precondition" 
-              name="precondition" 
-              rows="2" 
-              class="w-full border rounded p-2"
-              placeholder="Enter preconditions (if any)"
-            ></textarea>
-          </div>
-          <div>
-            <label class="block text-gray-700 mb-2">Automation Needed</label>
-            <select 
-              id="automationNeeded" 
-              name="automationNeeded" 
-              class="w-full border rounded p-2"
-              required
-            >
-              <option value="Yes">Yes</option>
-              <option value="No">No</option>
-              <option value="TBD">TBD</option>
-            </select>
-          </div>
-          <div id="stepsContainer">
-            <label class="block text-gray-700 mb-2">Test Steps</label>
-            <div class="space-y-4" id="steps">
-              <div class="step-entry border p-4 rounded">
-                <input 
-                  type="text" 
-                  name="step" 
-                  class="w-full border rounded p-2 mb-2"
-                  placeholder="Enter test step"
-                  required
-                />
-                <input 
-                  type="text" 
-                  name="test_data" 
-                  class="w-full border rounded p-2 mb-2"
-                  placeholder="Test data (optional)"
-                />
-                <input 
-                  type="text" 
-                  name="expected_result" 
-                  class="w-full border rounded p-2"
-                  placeholder="Expected result"
-                  required
-                />
-              </div>
-            </div>
-            <button type="button" id="addStep" class="mt-2 text-blue-500 hover:text-blue-600">
-              + Add Another Step
-            </button>
-          </div>
+
           <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            Create Test Case
+            Generate Test Case
           </button>
         </form>
 
-        <!-- Search Section -->
-        <div class="mt-8 pt-8 border-t">
-          <h2 class="text-2xl font-bold mb-4">Search Test Cases</h2>
-          <form id="searchForm" class="space-y-4">
-            <div>
-              <label class="block text-gray-700 mb-2">Search Query</label>
-              <input 
-                type="text" 
-                id="searchQuery" 
-                name="query" 
-                class="w-full border rounded p-2"
-                placeholder="Search test cases..."
-                required
-              />
-            </div>
-            <div>
-              <label class="block text-gray-700 mb-2">Search In</label>
-              <select 
-                id="searchSource" 
-                name="source" 
-                class="w-full border rounded p-2"
-              >
-                <option value="all">All Sources</option>
-                <option value="weaviate">Weaviate Only</option>
-                <option value="zephyr">Zephyr Scale Only</option>
-              </select>
-            </div>
-            <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-              Search
-            </button>
-          </form>
+        <!-- Example Requirements Section -->
+        <div class="mt-6 p-4 bg-gray-50 rounded">
+          <h3 class="text-lg font-semibold mb-2">Example Requirement Format:</h3>
+          <pre class="whitespace-pre-wrap text-sm text-gray-600">
+Login Feature Test
+Description: Verify that users can successfully log in to the application using valid credentials.
 
-          <!-- Search Results -->
-          <div id="searchResults" class="mt-8 hidden">
-            <h3 class="text-xl font-bold mb-4">Search Results</h3>
-            <div id="resultsList" class="space-y-4">
-              <!-- Results will be dynamically inserted here -->
-            </div>
-          </div>
+Prerequisites:
+- User account exists in the system
+- User has valid credentials
+- System is accessible via web browser
+
+Acceptance Criteria:
+- User can access login page
+- System validates email format
+- System validates password requirements
+- User receives error message for invalid credentials
+- User is redirected to dashboard after successful login
+          </pre>
         </div>
       </div>
     </div>
@@ -420,29 +371,45 @@
     document.getElementById('testCaseForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      // Collect steps data
-      const stepEntries = document.querySelectorAll('.step-entry');
-      const steps = Array.from(stepEntries).map(entry => ({
-        step: entry.querySelector('[name="step"]').value,
-        test_data: entry.querySelector('[name="test_data"]').value,
-        expected_result: entry.querySelector('[name="expected_result"]').value
-      }));
+      const formData = new FormData();
+      const requirementText = document.getElementById('requirementText').value;
+      const projectKey = document.getElementById('projectKey').value;
+      const wireframeFiles = document.getElementById('wireframes').files;
 
-      const testCaseData = {
-        name: document.getElementById('name').value,
-        objective: document.getElementById('objective').value,
-        precondition: document.getElementById('precondition').value,
-        automation_needed: document.getElementById('automationNeeded').value,
-        steps: steps
+      // Create request payload
+      const requestData = {
+        requirement_text: requirementText,
+        project_key: projectKey,
+        wireframe_paths: [] // Will be populated after file upload
       };
 
       try {
+        // First, handle file uploads if any
+        if (wireframeFiles.length > 0) {
+          for (let file of wireframeFiles) {
+            formData.append('wireframes[]', file);
+          }
+
+          const uploadResponse = await fetch('/api/v1/upload-wireframes', {
+            method: 'POST',
+            body: formData
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error('Failed to upload wireframes');
+          }
+
+          const uploadResult = await uploadResponse.json();
+          requestData.wireframe_paths = uploadResult.file_paths;
+        }
+
+        // Create test case
         const response = await fetch('/api/v1/test-cases', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify(testCaseData)
+          body: JSON.stringify(requestData)
         });
 
         const result = await response.json();
@@ -451,8 +418,14 @@
           throw new Error(result.error || 'Failed to create test case');
         }
 
-        alert('Test case created successfully!');
+        // Show success message with details
+        alert(`Test case created successfully!
+Weaviate ID: ${result.weaviate_id}
+Zephyr Key: ${result.zephyr_key}`);
+
+        // Reset form
         e.target.reset();
+
       } catch (error) {
         console.error('Error:', error);
         alert('Error creating test case: ' + error.message);
