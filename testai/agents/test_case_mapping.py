@@ -66,9 +66,8 @@ class TestCaseMappingAgent(BaseAgent):
                 "projectKey": self.zephyr_project_key,
                 "name": test_case["title"],
                 "objective": test_case["description"],
-                "priorityName": "Normal",  # Changed to simple "Normal"
+                "priorityName": "Normal",
                 "statusName": "Draft",
-                # Add required custom field
                 "customFields": {
                     "Automation": "TBD"
                 }
@@ -76,24 +75,36 @@ class TestCaseMappingAgent(BaseAgent):
 
             # Add preconditions (Given)
             if test_case["format"]["given"]:
-                zephyr_test_case["precondition"] = "\n".join(test_case["format"]["given"])
+                zephyr_test_case["precondition"] = "\n".join([
+                    f"- {step}" for step in test_case["format"]["given"]
+                ])
 
             # Add test steps (When + Then)
-            steps = []
-            # Ensure we have both when and then steps
             when_steps = test_case["format"].get("when", [])
             then_steps = test_case["format"].get("then", [])
 
-            # Use zip_longest to handle cases where there might be more when steps than then steps or vice versa
-            for when_step, then_step in zip_longest(when_steps, then_steps, fillvalue=""):
-                step = {
-                    "description": when_step,
-                    "expectedResult": then_step,
-                    "testData": ""  # Can be populated with actual test data if available
-                }
-                steps.append(step)
+            # Create steps using the format from Zephyr Scale API documentation
+            steps = []
+            for index, (when_step, then_step) in enumerate(zip_longest(when_steps, then_steps, fillvalue="N/A"), 1):
+                test_data = ""
+                if "username" in when_step.lower():
+                    test_data = "testuser@example.com"
+                elif "password" in when_step.lower():
+                    test_data = "Password123!"
+                else:
+                    test_data = f"Test data for step {index}"
 
-            zephyr_test_case["steps"] = steps
+                steps.append({
+                    "description": when_step,
+                    "testData": test_data,
+                    "expectedResult": then_step
+                })
+
+            # Wrap steps in script object for proper API formatting
+            zephyr_test_case["script"] = {
+                "type": "STEP_BY_STEP",
+                "steps": steps
+            }
 
             # Add labels if tags exist
             if test_case["format"].get("tags"):
@@ -102,7 +113,7 @@ class TestCaseMappingAgent(BaseAgent):
             # Log the request details
             logging.info(f"Sending request to Zephyr Scale with data: {json.dumps(zephyr_test_case, indent=2)}")
 
-            # Prepare headers - Using API key as bearer token
+            # Prepare headers
             headers = {
                 "Authorization": f"Bearer {self.zephyr_api_key}",
                 "Content-Type": "application/json",
@@ -131,11 +142,8 @@ class TestCaseMappingAgent(BaseAgent):
                 logging.error(f"Error response: {response.text}")
                 return False
 
-        except requests.exceptions.RequestException as e:
-            logging.error(f"Network error while calling Zephyr Scale API: {str(e)}")
-            return False
         except Exception as e:
-            logging.error(f"Unexpected error in Zephyr Scale integration: {str(e)}")
+            logging.error(f"Error in Zephyr Scale integration: {str(e)}")
             return False
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
@@ -200,12 +208,12 @@ class TestCaseMappingAgent(BaseAgent):
                     "User clicks the login button"
                 ],
                 then=[
-                    "User is successfully logged in",
-                    "User is redirected to the dashboard",
-                    "Welcome message is displayed with user's name"
+                    "Username field accepts the input",
+                    "Password field accepts the input",
+                    "User is successfully logged in and redirected to the dashboard"
                 ],
                 tags=["authentication", "login", "critical-path", "smoke-test"],
-                priority="high"
+                priority="Normal"
             ),
             metadata={
                 "source": "requirement",
@@ -218,7 +226,7 @@ class TestCaseMappingAgent(BaseAgent):
     def _generate_generic_test_case(self, requirement: str) -> TestCaseOutput:
         """Generate a generic test case"""
         return TestCaseOutput(
-            title=f"Test: {requirement[:50]}",
+            title=f"Test: {requirement[:50]}...",
             description=requirement,
             format=TestCaseFormat(
                 given=[
@@ -237,7 +245,7 @@ class TestCaseMappingAgent(BaseAgent):
                     "System state is updated correctly"
                 ],
                 tags=["functional", "regression"],
-                priority="medium"
+                priority="Normal"
             ),
             metadata={
                 "source": "requirement",
