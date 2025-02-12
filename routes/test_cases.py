@@ -117,7 +117,17 @@ def search_test_cases():
             return jsonify({"error": "Search query is required"}), 400
 
         logger.info(f"Searching test cases with query: {query}")
+
+        # Initialize Weaviate client if not already initialized
+        if not weaviate_client:
+            logger.info("Initializing Weaviate client for search...")
+            init_integrations()
+
+        # Search using the test case mapping agent which handles both vector and memory search
         results = test_case_mapping_agent.query_test_cases(query)
+
+        logger.info(f"Found {len(results)} test cases matching query: {query}")
+        logger.debug(f"Search results: {results}")
 
         return jsonify({
             "results": results,
@@ -125,7 +135,7 @@ def search_test_cases():
         }), 200
 
     except Exception as e:
-        logger.error(f"Error searching test cases: {str(e)}")
+        logger.error(f"Error searching test cases: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @test_cases_bp.route('/test-cases/<name>', methods=['GET'])
