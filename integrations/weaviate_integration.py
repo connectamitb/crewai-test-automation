@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Any
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
 
-    def __init__(self, max_retries: int = 5, startup_period: int = 30):
+    def __init__(self, max_retries: int = 3, startup_period: int = 120):
         """Initialize Weaviate client with configuration"""
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
@@ -44,16 +44,19 @@ class WeaviateIntegration:
             try:
                 self.logger.info(f"Attempting to initialize Weaviate client (attempt {retry_count + 1})")
 
+                # Create auth config
                 auth_config = self._weaviate.auth.AuthApiKey(api_key=self.api_key)
+
+                # Initialize client with increased timeout and startup period
                 self._client = self._weaviate.Client(
                     url="https://test-cases-crewai-b5c7k1op.weaviate.network",
                     auth_client_secret=auth_config,
-                    timeout_config=(5, 60),  # (connect_timeout, read_timeout)
-                    startup_period=self.startup_period
+                    timeout_config=(60, 180),  # Further increased timeouts (connect, read)
+                    startup_period=self.startup_period  # Use the provided startup period
                 )
 
+                # Test connection
                 if self._test_connection():
-                    self._ensure_schema()
                     self.logger.info("Weaviate client initialized successfully")
                     return
 
@@ -61,7 +64,7 @@ class WeaviateIntegration:
                 self.logger.error(f"Weaviate initialization attempt {retry_count + 1} failed: {str(e)}")
                 retry_count += 1
                 if retry_count < self.max_retries:
-                    wait_time = min(2 ** retry_count, 30)  # Cap wait time at 30 seconds
+                    wait_time = min(2 ** retry_count, 30)
                     self.logger.info(f"Waiting {wait_time} seconds before retry")
                     time.sleep(wait_time)
 
@@ -70,7 +73,11 @@ class WeaviateIntegration:
 
     def is_healthy(self) -> bool:
         """Check if the Weaviate client is healthy and connected"""
-        return bool(self._client and self._test_connection())
+        try:
+            return bool(self._client and self._test_connection())
+        except Exception as e:
+            self.logger.error(f"Health check failed: {str(e)}")
+            return False
 
     def _test_connection(self) -> bool:
         """Test the Weaviate connection"""
@@ -158,14 +165,17 @@ class WeaviateIntegration:
             weaviate_data = test_case.to_weaviate_format()
             self.logger.debug(f"Attempting to store test case: {weaviate_data}")
 
-            uuid = self._client.data_object.create(
-                data_object=weaviate_data,
-                class_name="TestCase"
-            )
-
-            if uuid:
-                self.logger.info(f"Successfully stored test case with ID: {uuid}")
-                return uuid
+            # Only attempt to store if client is available
+            if self._client:
+                uuid = self._client.data_object.create(
+                    data_object=weaviate_data,
+                    class_name="TestCase"
+                )
+                if uuid:
+                    self.logger.info(f"Successfully stored test case with ID: {uuid}")
+                    return uuid
+            else:
+                self.logger.warning("Store operation skipped - client unavailable")
 
         except Exception as e:
             self.logger.error(f"Failed to store test case: {str(e)}")
@@ -179,6 +189,10 @@ class WeaviateIntegration:
             return []
 
         try:
+            if not self._client:
+                self.logger.warning("Search operation skipped - client unavailable")
+                return []
+
             result = (
                 self._client.query
                 .get("TestCase", ["title", "description", "format", "metadata"])
@@ -198,41 +212,37 @@ class WeaviateIntegration:
             self.logger.error(f"Search error: {str(e)}")
             return []
 
-    def get_test_case(self, title: str) -> Optional[Dict[str, Any]]:
-        """Get a test case by title with retries"""
-        if not self._client or not self.is_healthy():
-            self.logger.error("Weaviate client not initialized or unhealthy")
+    def get_test_case(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get a test case by name"""
+        if not self.is_healthy():
+            self.logger.error("Weaviate client not healthy")
             return None
 
-        retry_count = 0
-        while retry_count < self.max_retries:
-            try:
-                self.logger.debug(f"Getting test case (attempt {retry_count + 1}): {title}")
-                result = (
-                    self._client.query
-                    .get("TestCase", ["title", "description", "format", "metadata"])
-                    .with_where({
-                        "path": ["title"],
-                        "operator": "Equal",
-                        "valueString": title
-                    })
-                    .do()
-                )
-
-                if result and "data" in result and "Get" in result["data"]:
-                    cases = result["data"]["Get"]["TestCase"]
-                    if cases:
-                        self.logger.info(f"Found test case: {title}")
-                        return cases[0]
-
-                self.logger.warning(f"No test case found with title: {title}")
+        try:
+            if not self._client:
+                self.logger.warning("Get operation skipped - client unavailable")
                 return None
 
-            except Exception as e:
-                self.logger.error(f"Get attempt {retry_count + 1} failed: {str(e)}")
-                retry_count += 1
-                if retry_count < self.max_retries:
-                    time.sleep(2 ** retry_count)
+            result = (
+                self._client.query
+                .get("TestCase", ["title", "description", "format", "metadata"])
+                .with_where({
+                    "path": ["title"],
+                    "operator": "Equal",
+                    "valueString": name
+                })
+                .do()
+            )
 
-        self.logger.error(f"Failed to get test case after {self.max_retries} attempts")
-        return None
+            if result and "data" in result and "Get" in result["data"]:
+                cases = result["data"]["Get"]["TestCase"]
+                if cases:
+                    self.logger.info(f"Found test case: {name}")
+                    return cases[0]
+
+            self.logger.warning(f"No test case found with name: {name}")
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error retrieving test case: {str(e)}")
+            return None

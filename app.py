@@ -28,14 +28,32 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_key_123")
 logger.info("Flask app instance created")
 
-# Blueprint registration will be attempted but not required for basic functionality
+# Initialize Weaviate client globally
+weaviate_client = None
 try:
-    logger.info("Checking for test_cases blueprint")
-    from routes import test_cases_bp
-    app.register_blueprint(test_cases_bp, url_prefix='/api/v1')
+    from integrations.weaviate_integration import WeaviateIntegration
+    weaviate_client = WeaviateIntegration()
+    if weaviate_client.is_healthy():
+        logger.info("Weaviate client initialized successfully")
+    else:
+        logger.warning("Weaviate client initialization failed, running in degraded mode")
+except ImportError as e:
+    logger.warning(f"Weaviate integration not available: {str(e)}")
+except Exception as e:
+    logger.error(f"Error initializing Weaviate client: {str(e)}")
+    logger.debug(traceback.format_exc())
+
+# Add Weaviate client to app config for blueprint access
+app.config['weaviate_client'] = weaviate_client
+
+# Blueprint registration will proceed regardless of Weaviate status
+try:
+    logger.info("Registering test_cases blueprint")
+    from routes.test_cases import test_cases_bp
+    app.register_blueprint(test_cases_bp)  # Remove url_prefix to match frontend calls
     logger.info("Successfully registered test_cases blueprint")
-except ImportError:
-    logger.warning("test_cases blueprint not found - continuing with basic functionality")
+except ImportError as e:
+    logger.warning(f"test_cases blueprint not found - continuing with basic functionality: {str(e)}")
 except Exception as e:
     logger.error(f"Error registering blueprint: {str(e)}")
     logger.debug(traceback.format_exc())
@@ -52,6 +70,7 @@ def index():
 
 @app.errorhandler(404)
 def not_found(error):
+    logger.warning(f"404 error: {str(error)}")
     return jsonify({"error": "Not found"}), 404
 
 @app.errorhandler(500)

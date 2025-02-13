@@ -21,6 +21,14 @@ class TestCase(BaseModel):
 
     def to_weaviate_format(self) -> Dict:
         """Convert to Weaviate-compatible format"""
+        metadata_dict = {
+            "tags": self.tags or [],
+            "priority": self.priority,
+            "automation_needed": self.automation_needed
+        }
+        if self.metadata:
+            metadata_dict.update(self.metadata)
+
         return {
             "title": self.name,
             "description": self.objective,
@@ -29,12 +37,7 @@ class TestCase(BaseModel):
                 "when": [step["step"] for step in self.steps],
                 "then": [step["expected_result"] for step in self.steps]
             },
-            "metadata": {
-                "tags": self.tags or [],
-                "priority": self.priority,
-                "automation_needed": self.automation_needed,
-                **self.metadata if self.metadata else {}
-            }
+            "metadata": metadata_dict
         }
 
 class TestSuite(BaseModel):
