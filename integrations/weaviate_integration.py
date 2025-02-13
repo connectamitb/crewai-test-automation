@@ -16,27 +16,23 @@ class WeaviateIntegration:
 
         try:
             # Get credentials from environment
-            weaviate_url = os.getenv("WEAVIATE_URL", "https://mtkcafmlsuso0nc3pcaujg.c0.us-west3.gcp.weaviate.cloud")
+            weaviate_url = os.getenv("WEAVIATE_URL", "http://localhost:8080")
             weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
-            openai_api_key = os.getenv("OPENAI_API_KEY")
 
             if not weaviate_api_key:
                 raise ValueError("WEAVIATE_API_KEY environment variable is required")
 
-            # Configure client - Updated for v3.25.3
+            # Initialize client with v3.25.3 compatible configuration
             self.client = weaviate.Client(
                 url=weaviate_url,
-                auth_client_secret=weaviate.auth.AuthApiKey(api_key=weaviate_api_key),
-                additional_headers={
-                    "X-OpenAI-Api-Key": openai_api_key
-                } if openai_api_key else {}
+                auth_client_secret=weaviate.AuthApiKey(api_key=weaviate_api_key)
             )
 
             if self.is_healthy():
                 self.logger.info("✅ Weaviate client initialized successfully")
                 self._create_schema()
             else:
-                self.logger.warning("❌ Weaviate health check failed")
+                self.logger.error("❌ Weaviate health check failed")
                 self.client = None
 
         except Exception as e:
@@ -57,16 +53,14 @@ class WeaviateIntegration:
     def _create_schema(self):
         """Create the test case schema in Weaviate"""
         try:
-            # Check if schema already exists
             current_schema = self.client.schema.get()
-            if any(c["class"] == "TestCase" for c in current_schema["classes"]):
+            if any(c["class"] == "TestCase" for c in current_schema.get("classes", [])):
                 self.logger.info("Schema already exists")
                 return
 
-            # Define schema for test cases
             schema = {
                 "class": "TestCase",
-                "vectorizer": "text2vec-openai",
+                "vectorizer": "text2vec-openai",  # This can be changed based on your needs
                 "properties": [
                     {
                         "name": "name",
@@ -105,7 +99,7 @@ class WeaviateIntegration:
             self.logger.info("✅ Schema created successfully")
 
         except Exception as e:
-            self.logger.error(f"⚠️ Schema creation failed: {str(e)}")
+            self.logger.error(f"Schema creation failed: {str(e)}")
             raise
 
     def store_test_case(self, test_case: TestCase) -> Optional[str]:

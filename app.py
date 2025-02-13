@@ -29,10 +29,6 @@ def init_weaviate():
     global weaviate_client
     if weaviate_client is None:
         try:
-            # Log environment variables (excluding sensitive values)
-            weaviate_url = os.getenv("WEAVIATE_URL", "https://mtkcafmlsuso0nc3pcaujg.c0.us-west3.gcp.weaviate.cloud")
-            logger.debug(f"Initializing Weaviate client with URL: {weaviate_url}")
-
             if not os.getenv("WEAVIATE_API_KEY"):
                 logger.error("WEAVIATE_API_KEY is not set")
                 return None
@@ -45,11 +41,12 @@ def init_weaviate():
                 app.config['weaviate_client'] = weaviate_client
                 return weaviate_client
             else:
-                logger.error("⚠️ Weaviate client health check failed")
+                logger.error("❌ Weaviate client health check failed")
                 weaviate_client = None
+
         except Exception as e:
             logger.error(f"❌ Error initializing Weaviate client: {str(e)}")
-            logger.debug(traceback.format_exc())
+            logger.error(traceback.format_exc())
             weaviate_client = None
     return weaviate_client
 
@@ -61,7 +58,7 @@ try:
     logger.info("Successfully registered test_cases blueprint")
 except Exception as e:
     logger.error(f"Error registering blueprint: {str(e)}")
-    logger.debug(traceback.format_exc())
+    logger.error(traceback.format_exc())
 
 @app.route('/')
 def index():
