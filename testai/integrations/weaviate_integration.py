@@ -1,41 +1,65 @@
 """Mock vector database integration for storing and retrieving test cases."""
 import logging
+import weaviate
+import os
 from typing import Dict, List, Any, Optional
 from pydantic import BaseModel
 
-class TestCaseVectorStore(BaseModel):
-    """Model for test case vector storage operations"""
-    title: str
-    description: str
-    format: Dict[str, List[str]]
-    metadata: Optional[Dict[str, Any]] = None
+class TestCase(BaseModel):
+    """Test case model for Weaviate storage"""
+    name: str
+    objective: str
+    precondition: str
+    steps: List[Dict[str, str]]
+    automation_needed: str = "TBD"
 
 class WeaviateIntegration:
     """Mock implementation of vector database integration"""
 
     def __init__(self):
         """Initialize mock storage"""
-        self.test_cases = []
+        self.client = weaviate.Client(
+            url=os.getenv("WEAVIATE_URL", "http://localhost:8080"),
+            auth_client_secret=weaviate.AuthApiKey(api_key=os.getenv("WEAVIATE_API_KEY")),
+        )
+        self._create_schema()
         logging.info("Mock vector database initialized")
 
-    def store_test_case(self, test_case: Dict[str, Any]) -> bool:
-        """Store a test case in mock storage
-
-        Args:
-            test_case: Test case data to store
-
-        Returns:
-            bool indicating success
-        """
+    def _create_schema(self):
+        """Create the test case schema in Weaviate"""
+        schema = {
+            "class": "TestCase",
+            "properties": [
+                {"name": "name", "dataType": ["text"]},
+                {"name": "objective", "dataType": ["text"]},
+                {"name": "precondition", "dataType": ["text"]},
+                {"name": "steps", "dataType": ["text[]"]},
+                {"name": "requirement", "dataType": ["text"]},
+                {"name": "gherkin", "dataType": ["text"]}
+            ],
+            "vectorizer": "text2vec-openai"
+        }
         try:
-            logging.info(f"Attempting to store test case: {test_case}")
-            self.test_cases.append(test_case)
-            logging.info(f"Successfully stored test case: {test_case['title']}")
-            logging.info(f"Total test cases in storage: {len(self.test_cases)}")
-            return True
-        except Exception as e:
-            logging.error(f"Error storing test case: {str(e)}")
-            return False
+            self.client.schema.create_class(schema)
+        except Exception:
+            pass  # Schema might already exist
+
+    def store_test_case(self, test_case: TestCase, requirement: str, gherkin: str) -> str:
+        """Store a test case in Weaviate"""
+        properties = {
+            "name": test_case.name,
+            "objective": test_case.objective,
+            "precondition": test_case.precondition,
+            "steps": [f"{s['step']}: {s['expected_result']}" for s in test_case.steps],
+            "requirement": requirement,
+            "gherkin": gherkin
+        }
+        
+        result = self.client.data_object.create(
+            data_object=properties,
+            class_name="TestCase"
+        )
+        return result["id"]
 
     def search_similar_test_cases(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """Search for similar test cases in mock storage
@@ -75,3 +99,14 @@ class WeaviateIntegration:
         except Exception as e:
             logging.error(f"Error searching test cases: {str(e)}")
             return []
+
+    def search_by_requirement(self, query: str, limit: int = 5) -> List[Dict]:
+        """Search test cases by requirement text"""
+        result = (
+            self.client.query
+            .get("TestCase", ["name", "objective", "gherkin", "requirement"])
+            .with_near_text({"concepts": [query]})
+            .with_limit(limit)
+            .do()
+        )
+        return result["data"]["Get"]["TestCase"]

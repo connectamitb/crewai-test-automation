@@ -1,0 +1,10 @@
+flask
+python-dotenv
+crewai
+weaviate-client
+openai
+pydantic
+pydantic-settings
+langchain
+langchain-openai 
+weaviate-client>=4.0.0

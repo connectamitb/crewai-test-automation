@@ -2,9 +2,10 @@
 import os
 import sys
 import logging
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv
 import traceback
+from integrations.weaviate_integration import WeaviateIntegration
 
 # Configure logging with more detail
 logging.basicConfig(
@@ -31,7 +32,6 @@ logger.info("Flask app instance created")
 # Initialize Weaviate client globally
 weaviate_client = None
 try:
-    from integrations.weaviate_integration import WeaviateIntegration
     weaviate_client = WeaviateIntegration()
     if weaviate_client.is_healthy():
         logger.info("Weaviate client initialized successfully")
@@ -60,13 +60,36 @@ except Exception as e:
 
 @app.route('/')
 def index():
-    """Render the dashboard homepage"""
+    """Render the main page"""
+    return render_template('index.html')
+
+@app.route('/api/search', methods=['POST'])
+def search_test_cases():
+    """Search for test cases"""
     try:
-        logger.info("Rendering index page")
-        return render_template('index.html')
+        data = request.get_json()
+        query = data.get('query')
+
+        if not query:
+            return jsonify({"error": "Search query is required"}), 400
+
+        if weaviate_client and weaviate_client.is_healthy():
+            results = weaviate_client.search_test_cases(query)
+            return jsonify({"success": True, "results": results})
+        else:
+            return jsonify({"success": False, "error": "Search service unavailable", "results": []}), 503
+
     except Exception as e:
-        logger.error(f"Error rendering index: {str(e)}")
-        return jsonify({"error": "Failed to render dashboard"}), 500
+        logger.error(f"Error searching test cases: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/health')
+def health_check():
+    """Check if all components are healthy"""
+    return jsonify({
+        "status": "healthy",
+        "weaviate": weaviate_client is not None and weaviate_client.is_healthy()
+    })
 
 @app.errorhandler(404)
 def not_found(error):

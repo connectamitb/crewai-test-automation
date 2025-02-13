@@ -18,8 +18,9 @@ class WeaviateIntegration:
         try:
             import weaviate
             self._weaviate = weaviate
-        except ImportError:
-            self.logger.error("Failed to import weaviate package")
+            self.logger.debug("Successfully imported weaviate package")
+        except ImportError as e:
+            self.logger.error(f"Failed to import weaviate package: {str(e)}")
             self._weaviate = None
             return
 
@@ -43,26 +44,38 @@ class WeaviateIntegration:
         while retry_count < self.max_retries:
             try:
                 self.logger.info(f"Attempting to initialize Weaviate client (attempt {retry_count + 1})")
+                self.logger.debug("Setting up authentication configuration")
 
-                # Create auth config
-                auth_config = self._weaviate.auth.AuthApiKey(api_key=self.api_key)
+                # Create auth config for v4
+                auth_config = self._weaviate.auth.ApiKey(api_key=self.api_key)
 
-                # Initialize client with increased timeout and startup period
+                # Configure client with updated settings for v4
+                client_config = self._weaviate.Config(
+                    timeout_config=(60, 180),  # (connect_timeout, read_timeout)
+                )
+
+                # Initialize client with new configuration format
                 self._client = self._weaviate.Client(
                     url="https://test-cases-crewai-b5c7k1op.weaviate.network",
                     auth_client_secret=auth_config,
-                    timeout_config=(60, 180),  # Further increased timeouts (connect, read)
-                    startup_period=self.startup_period  # Use the provided startup period
+                    additional_headers={
+                        "X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY", "")  # Optional for text2vec-openai
+                    },
+                    additional_config=client_config,
+                    startup_period=self.startup_period
                 )
 
-                # Test connection
+                self.logger.debug("Testing connection to Weaviate")
                 if self._test_connection():
-                    self.logger.info("Weaviate client initialized successfully")
+                    self.logger.info("Weaviate client initialized and connected successfully")
+                    self._ensure_schema()
                     return
 
             except Exception as e:
                 self.logger.error(f"Weaviate initialization attempt {retry_count + 1} failed: {str(e)}")
+                self.logger.debug(f"Full error details: {str(e)}", exc_info=True)
                 retry_count += 1
+
                 if retry_count < self.max_retries:
                     wait_time = min(2 ** retry_count, 30)
                     self.logger.info(f"Waiting {wait_time} seconds before retry")
@@ -71,23 +84,31 @@ class WeaviateIntegration:
         self.logger.error(f"Failed to initialize Weaviate client after {self.max_retries} attempts")
         self._client = None
 
+    def _test_connection(self) -> bool:
+        """Test the Weaviate connection"""
+        try:
+            if not self._client:
+                return False
+
+            # Test schema access
+            self._client.schema.get()
+
+            # Additional health check
+            health_info = self._client.get_meta()
+            self.logger.debug(f"Weaviate health check response: {health_info}")
+
+            return True
+        except Exception as e:
+            self.logger.error(f"Connection test failed: {str(e)}")
+            self.logger.debug("Full connection test error:", exc_info=True)
+            return False
+
     def is_healthy(self) -> bool:
         """Check if the Weaviate client is healthy and connected"""
         try:
             return bool(self._client and self._test_connection())
         except Exception as e:
             self.logger.error(f"Health check failed: {str(e)}")
-            return False
-
-    def _test_connection(self) -> bool:
-        """Test the Weaviate connection"""
-        try:
-            if not self._client:
-                return False
-            self._client.schema.get()
-            return True
-        except Exception as e:
-            self.logger.error(f"Connection test failed: {str(e)}")
             return False
 
     def _ensure_schema(self) -> None:

@@ -11,14 +11,19 @@ class AgentConfig(BaseModel):
     goal: str
     backstory: str
     allow_delegation: bool = True
-    verbose: bool = False
+    verbose: bool = True
 
 class BaseAgent:
     """Base class for all agents with common functionality"""
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig = None):
         """Initialize the base agent with configuration"""
-        self.config = config
+        self.config = config or AgentConfig(
+            agent_id="base_001",
+            role="Base Agent",
+            goal="Execute basic agent tasks",
+            backstory="A foundational agent with basic capabilities",
+        )
         self.logger = logging.getLogger(self.__class__.__name__)
         self.logger.setLevel(logging.DEBUG)
 
@@ -72,8 +77,7 @@ class BaseAgent:
         return {
             "agent_id": self.config.agent_id,
             "role": self.config.role,
-            "status": "active",
-            "current_task": None  # To be updated by implementing agents
+            "status": "active"
         }
 
     def handle_event(self, event: Dict[str, Any]) -> None:
