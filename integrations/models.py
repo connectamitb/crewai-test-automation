@@ -8,40 +8,33 @@ class TestStep(BaseModel):
     test_data: Optional[str] = None
     expected_result: str
 
-class TestCaseFormat(BaseModel):
-    """Model for test case format"""
-    given: List[str]
-    when: List[str]
-    then: List[str]
-
 class TestCase(BaseModel):
     """Test case model with full functionality"""
-    title: str
-    description: str
-    format: TestCaseFormat
+    name: str
+    objective: str
+    precondition: Optional[str] = None
+    automation_needed: Optional[str] = "TBD"
+    steps: List[Dict[str, str]]
     tags: Optional[List[str]] = None
     priority: str = "Normal"
     metadata: Optional[Dict] = None
 
     def to_weaviate_format(self) -> Dict:
         """Convert to Weaviate-compatible format"""
-        metadata = {}
-        if self.metadata:
-            metadata.update(self.metadata)
-        metadata.update({
-            "tags": self.tags,
-            "priority": self.priority
-        })
-
         return {
-            "title": self.title,
-            "description": self.description,
+            "title": self.name,
+            "description": self.objective,
             "format": {
-                "given": self.format.given,
-                "when": self.format.when,
-                "then": self.format.then
+                "given": [self.precondition] if self.precondition else [],
+                "when": [step["step"] for step in self.steps],
+                "then": [step["expected_result"] for step in self.steps]
             },
-            "metadata": metadata
+            "metadata": {
+                "tags": self.tags or [],
+                "priority": self.priority,
+                "automation_needed": self.automation_needed,
+                **self.metadata if self.metadata else {}
+            }
         }
 
 class TestSuite(BaseModel):
