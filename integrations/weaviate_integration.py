@@ -16,12 +16,14 @@ class WeaviateIntegration:
         self.startup_period = startup_period
 
         try:
-            import weaviate
-            self._weaviate = weaviate
+            from weaviate import WeaviateClient, AuthApiKey
+            self._weaviate = WeaviateClient
+            self._auth = AuthApiKey
             self.logger.debug("Successfully imported weaviate package")
         except ImportError as e:
             self.logger.error(f"Failed to import weaviate package: {str(e)}")
             self._weaviate = None
+            self._auth = None
             return
 
         try:
@@ -44,25 +46,14 @@ class WeaviateIntegration:
         while retry_count < self.max_retries:
             try:
                 self.logger.info(f"Attempting to initialize Weaviate client (attempt {retry_count + 1})")
-                self.logger.debug("Setting up authentication configuration")
 
-                # Create auth config for v4
-                auth_config = self._weaviate.auth.ApiKey(api_key=self.api_key)
-
-                # Configure client with updated settings for v4
-                client_config = self._weaviate.Config(
-                    timeout_config=(60, 180),  # (connect_timeout, read_timeout)
-                )
-
-                # Initialize client with new configuration format
-                self._client = self._weaviate.Client(
+                # Initialize client with updated WeaviateClient class
+                self._client = self._weaviate(
                     url="https://test-cases-crewai-b5c7k1op.weaviate.network",
-                    auth_client_secret=auth_config,
+                    auth_client_secret=self._auth(api_key=self.api_key),
                     additional_headers={
-                        "X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY", "")  # Optional for text2vec-openai
-                    },
-                    additional_config=client_config,
-                    startup_period=self.startup_period
+                        "X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY", "")
+                    }
                 )
 
                 self.logger.debug("Testing connection to Weaviate")
@@ -92,11 +83,6 @@ class WeaviateIntegration:
 
             # Test schema access
             self._client.schema.get()
-
-            # Additional health check
-            health_info = self._client.get_meta()
-            self.logger.debug(f"Weaviate health check response: {health_info}")
-
             return True
         except Exception as e:
             self.logger.error(f"Connection test failed: {str(e)}")

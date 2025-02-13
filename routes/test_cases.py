@@ -93,7 +93,12 @@ def search_test_cases():
     try:
         query = request.args.get('q', '')
         if not query:
-            return jsonify({"error": "Search query is required"}), 400
+            logger.warning("Empty search query received")
+            return jsonify({
+                "status": "success",
+                "message": "Please provide a search query",
+                "results": []
+            }), 200
 
         logger.info(f"Searching test cases with query: {query}")
 
@@ -106,15 +111,30 @@ def search_test_cases():
                 "status": "error",
                 "message": "Search service temporarily unavailable",
                 "results": []
-            }), 200
+            }), 503
 
         results = weaviate_client.search_test_cases(query)
         logger.info(f"Found {len(results)} test cases")
 
+        # Transform results if needed to match frontend expectations
+        formatted_results = []
+        for result in results:
+            formatted_result = {
+                "name": result.get("title", "Untitled"),
+                "description": result.get("description", ""),
+                "format": result.get("format", {
+                    "given": [],
+                    "when": [],
+                    "then": []
+                }),
+                "metadata": result.get("metadata", {})
+            }
+            formatted_results.append(formatted_result)
+
         return jsonify({
             "status": "success",
-            "results": results,
-            "total": len(results)
+            "results": formatted_results,
+            "total": len(formatted_results)
         }), 200
 
     except Exception as e:
@@ -123,7 +143,7 @@ def search_test_cases():
             "status": "error",
             "message": str(e),
             "results": []
-        }), 200
+        }), 500
 
 @test_cases_bp.route('/api/v1/test-cases/<name>', methods=['GET'])
 def get_test_case(name):

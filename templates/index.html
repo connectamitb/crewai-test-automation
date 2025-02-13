@@ -296,28 +296,32 @@ Acceptance Criteria:
         const query = document.getElementById('searchQuery').value;
 
         try {
-          const response = await fetch('/api/search', {
-            method: 'POST',
+          const response = await fetch('/api/v1/test-cases/search', {
+            method: 'GET',
             headers: {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ query })
           });
-          
+
           const data = await response.json();
-          
-          if (data.success) {
+
+          if (data.status === "success") {
             const searchResults = document.getElementById('searchResults');
             const resultsList = document.getElementById('resultsList');
             searchResults.classList.remove('hidden');
             resultsList.innerHTML = '';
 
-            data.results.forEach((result, index) => {
-              const resultCard = createResultCard(result);
-              resultsList.appendChild(resultCard);
-            });
+            if (data.results && data.results.length > 0) {
+              data.results.forEach((result) => {
+                const resultCard = createResultCard(result);
+                resultsList.appendChild(resultCard);
+              });
+            } else {
+              resultsList.innerHTML = '<p class="text-gray-600">No test cases found matching your search.</p>';
+            }
           } else {
-            resultsList.innerHTML = `<p class="error">Error: ${data.error}</p>`;
+            throw new Error(data.message || 'Search failed');
           }
         } catch (error) {
           resultsList.innerHTML = `<p class="error">Error: ${error.message}</p>`;
