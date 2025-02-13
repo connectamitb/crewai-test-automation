@@ -1,7 +1,6 @@
 """Main entry point for the Flask application."""
-import sys
 import logging
-from app import create_app
+from app import app
 
 # Configure logging
 logging.basicConfig(
@@ -10,13 +9,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-try:
-    logger.info("Creating Flask application")
-    app = create_app()
-
-    if __name__ == "__main__":
+if __name__ == "__main__":
+    try:
         logger.info("Starting development server")
         app.run(host="0.0.0.0", port=5000, debug=True)
-except Exception as e:
-    logger.error(f"Failed to start application: {str(e)}", exc_info=True)
-    sys.exit(1)
+    except Exception as e:
+        logger.error(f"Failed to start application: {str(e)}", exc_info=True)
+        raise

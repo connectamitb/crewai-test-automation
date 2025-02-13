@@ -7,7 +7,7 @@ from typing import Optional, Dict, List, Any
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
 
-    def __init__(self, max_retries: int = 3, startup_period: int = 10):
+    def __init__(self, max_retries: int = 5, startup_period: int = 30):
         """Initialize Weaviate client with configuration"""
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
@@ -36,7 +36,7 @@ class WeaviateIntegration:
 
         self.api_key = os.environ.get('WEAVIATE_API_KEY')
         if not self.api_key:
-            self.logger.error("WEAVIATE_API_KEY not found in environment variables")
+            self.logger.warning("WEAVIATE_API_KEY not found, running in mock mode")
             return
 
         retry_count = 0
@@ -44,10 +44,12 @@ class WeaviateIntegration:
             try:
                 self.logger.info(f"Attempting to initialize Weaviate client (attempt {retry_count + 1})")
 
+                auth_config = self._weaviate.auth.AuthApiKey(api_key=self.api_key)
                 self._client = self._weaviate.Client(
                     url="https://test-cases-crewai-b5c7k1op.weaviate.network",
-                    auth_client_secret=self.api_key,
-                    timeout_config=(30, 120)
+                    auth_client_secret=auth_config,
+                    timeout_config=(5, 60),  # (connect_timeout, read_timeout)
+                    startup_period=self.startup_period
                 )
 
                 if self._test_connection():
@@ -59,7 +61,9 @@ class WeaviateIntegration:
                 self.logger.error(f"Weaviate initialization attempt {retry_count + 1} failed: {str(e)}")
                 retry_count += 1
                 if retry_count < self.max_retries:
-                    time.sleep(2 ** retry_count)
+                    wait_time = min(2 ** retry_count, 30)  # Cap wait time at 30 seconds
+                    self.logger.info(f"Waiting {wait_time} seconds before retry")
+                    time.sleep(wait_time)
 
         self.logger.error(f"Failed to initialize Weaviate client after {self.max_retries} attempts")
         self._client = None
