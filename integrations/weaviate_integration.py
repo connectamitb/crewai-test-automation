@@ -22,14 +22,11 @@ class WeaviateIntegration:
             openai_api_key = os.getenv("OPENAI_API_KEY")
 
             # Connect to existing Weaviate instance
-            self.client = WeaviateClient(
-                embedded_options=EmbeddedOptions(
-                    hostname="0.0.0.0",
-                    port=8079,
-                    grpc_port=50060
-                ),
-                auth_client_secret=AuthApiKey(api_key=self.api_key),
-                additional_headers={
+            self.client = WeaviateClient()
+            self.client.connect_to_local(
+                port=8079,
+                grpc_port=50060,
+                headers={
                     "X-OpenAI-Api-Key": openai_api_key
                 }
             )

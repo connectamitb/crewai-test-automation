@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 test_cases_bp = Blueprint('test_cases', __name__)
 
-@test_cases_bp.route('/api/test-cases', methods=['POST'])
+@test_cases_bp.route('/api/v1/test-cases', methods=['POST'])
 def create_test_case():
     """Create and store a test case"""
     try:
