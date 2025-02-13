@@ -3,6 +3,7 @@ import os
 import sys
 import logging
 from flask import Flask, render_template, jsonify, request
+from flask_cors import CORS
 from dotenv import load_dotenv
 import traceback
 
@@ -19,6 +20,7 @@ logger.info("Environment variables loaded")
 
 # Create Flask app
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_key_123")
 
 # Initialize Weaviate client lazily
@@ -75,6 +77,7 @@ def health_check():
             'weaviate': client.is_healthy() if client else False,
             'server': True
         }
+        logger.info(f"Health check status: {status}")
         return jsonify(status)
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
