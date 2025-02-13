@@ -21,14 +21,15 @@ class WeaviateIntegration:
             self.api_key = os.getenv("WEAVIATE_API_KEY")
             openai_api_key = os.getenv("OPENAI_API_KEY")
 
-            # Create client with embedded options for local development
+            # Connect to existing Weaviate instance
             self.client = WeaviateClient(
-                embedded_options=EmbeddedOptions(),
+                url="http://localhost:8079",
                 auth_client_secret=AuthApiKey(api_key=self.api_key),
                 additional_headers={
                     "X-OpenAI-Api-Key": openai_api_key
                 }
             )
+            self.client.connect()
 
             if self.is_healthy():
                 self.logger.info("✅ Weaviate client initialized successfully")
