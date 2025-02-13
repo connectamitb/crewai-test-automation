@@ -157,3 +157,9 @@ pydantic>=2.8.0
 weaviate-client>=4.10.4
 weaviate-client
 weaviate-client
+weaviate-client
+weaviate-client
+weaviate-client==4.9.1
+trafilatura
+weaviate-client>=4.9.0
+weaviate-client==3.15.5

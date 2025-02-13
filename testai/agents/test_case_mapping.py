@@ -5,7 +5,6 @@ from typing import Dict, List, Optional, Any
 from integrations.models import TestCase, TestCaseFormat
 from .base_agent import BaseAgent, AgentConfig
 from integrations.weaviate_integration import WeaviateIntegration
-from integrations.zephyr_integration import ZephyrIntegration, ZephyrTestCase
 
 class TestCaseMappingAgent(BaseAgent):
     """Agent responsible for mapping parsed requirements to formatted test cases"""
@@ -21,16 +20,19 @@ class TestCaseMappingAgent(BaseAgent):
         )
         super().__init__(config)
         self.logger = logging.getLogger(__name__)
-        self.generated_cases = []
+        self.logger.setLevel(logging.DEBUG)
 
-        # Initialize integrations
-        self.weaviate_client = WeaviateIntegration()
-        self.zephyr_client = ZephyrIntegration()
+        try:
+            # Initialize Weaviate client
+            self.weaviate_client = WeaviateIntegration()
+        except Exception as e:
+            self.logger.error(f"Failed to initialize Weaviate client: {str(e)}")
+            raise RuntimeError(f"Weaviate client initialization failed: {str(e)}")
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a test case mapping task"""
         try:
-            self.logger.debug(f"Received task: {task}")
+            self.logger.info(f"Received task: {task}")
 
             # Extract requirement from task
             requirement = task.get('requirement')
@@ -42,56 +44,45 @@ class TestCaseMappingAgent(BaseAgent):
             test_case_dict = test_case.to_weaviate_format()
             self.logger.debug(f"Generated test case: {test_case_dict}")
 
-            # Store locally for search
-            self.generated_cases.append(test_case_dict)
-
             # Store in Weaviate
-            weaviate_stored = False
             try:
                 weaviate_id = self.weaviate_client.store_test_case(test_case)
-                weaviate_stored = bool(weaviate_id)
-                self.logger.info(f"Stored test case in Weaviate: {weaviate_id}")
+                if not weaviate_id:
+                    raise Exception("Failed to store test case in Weaviate")
+
+                self.logger.info(f"Successfully stored test case in Weaviate with ID: {weaviate_id}")
+                weaviate_stored = True
             except Exception as e:
                 self.logger.error(f"Failed to store in Weaviate: {str(e)}")
+                raise Exception(f"Vector database storage failed: {str(e)}")
 
-            # Store in Zephyr Scale
-            zephyr_stored = False
-            try:
-                zephyr_test_case = ZephyrTestCase(
-                    name=test_case.title,
-                    objective=test_case.description,
-                    precondition="\n".join(test_case.format.given),
-                    steps=[{
-                        "step": step,
-                        "test_data": "",
-                        "expected_result": expected
-                    } for step, expected in zip(test_case.format.when, test_case.format.then)],
-                    priority=test_case.priority,
-                    labels=test_case.tags
-                )
-
-                # Store in Zephyr
-                zephyr_key = self.zephyr_client.create_test_case(zephyr_test_case)
-                zephyr_stored = bool(zephyr_key)
-                self.logger.info(f"Stored test case in Zephyr Scale: {zephyr_key}")
-            except Exception as e:
-                self.logger.error(f"Failed to store in Zephyr Scale: {str(e)}")
-
-            storage_info = {
-                "memory": True,
-                "weaviate": weaviate_stored,
-                "zephyr": zephyr_stored
-            }
-
+            # Return result
             return {
                 "status": "success",
                 "test_case": test_case_dict,
-                "storage": storage_info
+                "storage": {
+                    "weaviate": weaviate_stored
+                }
             }
 
         except Exception as e:
             self.logger.error(f"Error in test case mapping: {str(e)}", exc_info=True)
             raise
+
+    def query_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Search for test cases exclusively in vector database"""
+        try:
+            self.logger.info(f"Searching for test cases with query: {query}")
+
+            # Search in Weaviate
+            results = self.weaviate_client.search_test_cases(query, limit)
+            self.logger.info(f"Found {len(results)} test cases in Weaviate")
+            self.logger.debug(f"Search results: {results}")
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Query error: {str(e)}")
+            return []
 
     def _generate_test_case(self, requirement: Dict[str, Any]) -> TestCase:
         """Generate a test case based on requirement"""
@@ -154,85 +145,10 @@ class TestCaseMappingAgent(BaseAgent):
             priority="medium"
         )
 
-    def query_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Search for test cases in memory and vector database"""
-        try:
-            self.logger.info(f"Searching for: {query}")
-            matched_cases = []
-
-            # Search in memory first
-            memory_results = self._search_memory(query, limit)
-            if memory_results:
-                self.logger.info(f"Found {len(memory_results)} results in memory")
-                matched_cases.extend(memory_results)
-
-            # Try Weaviate search if available
-            try:
-                if self.weaviate_client._client is not None:
-                    weaviate_results = self.weaviate_client.search_test_cases(query, limit)
-                    if weaviate_results:
-                        self.logger.info(f"Found {len(weaviate_results)} results in Weaviate")
-                        matched_cases.extend(weaviate_results)
-                else:
-                    self.logger.warning("Weaviate client not initialized, skipping vector search")
-            except Exception as e:
-                self.logger.error(f"Weaviate search error: {str(e)}")
-                # Continue with memory results only
-
-            # Deduplicate by title
-            seen_titles = set()
-            unique_cases = []
-            for case in matched_cases:
-                title = case.get('title', '')
-                if title and title not in seen_titles:
-                    seen_titles.add(title)
-                    unique_cases.append(case)
-
-            self.logger.info(f"Returning {len(unique_cases)} unique test cases")
-            return unique_cases[:limit]
-
-        except Exception as e:
-            self.logger.error(f"Query error: {str(e)}")
-            return []
-
-    def _search_memory(self, query: str, limit: int) -> List[Dict[str, Any]]:
-        """Search for test cases in memory"""
-        matched_cases = []
-        query = query.lower()
-
-        for case in self.generated_cases:
-            score = 0
-            title = case.get('title', '').lower()
-            desc = case.get('description', '').lower()
-
-            if query in title:
-                score += 0.4
-            if query in desc:
-                score += 0.3
-
-            if case.get('format'):
-                steps = (
-                    case['format'].get('given', []) +
-                    case['format'].get('when', []) +
-                    case['format'].get('then', [])
-                )
-                if any(query in step.lower() for step in steps):
-                    score += 0.3
-
-            if score > 0:
-                matched_cases.append({
-                    'test_case': case,
-                    'score': score
-                })
-
-        matched_cases.sort(key=lambda x: x['score'], reverse=True)
-        return [x['test_case'] for x in matched_cases[:limit]]
-
     def update_status(self) -> Dict[str, Any]:
         """Update and return the current status of the agent"""
         status = super().update_status()
         status.update({
-            "test_cases_generated": len(self.generated_cases),
-            "last_test_case": self.generated_cases[-1] if self.generated_cases else None
+            "weaviate_connected": bool(self.weaviate_client._client)
         })
         return status
