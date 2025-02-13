@@ -2,8 +2,6 @@
 import logging
 from flask import Blueprint, request, jsonify
 from testai.agents.test_case_mapping import TestCaseMappingAgent
-from integrations.weaviate_integration import WeaviateIntegration
-from integrations.zephyr_integration import ZephyrIntegration
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -12,8 +10,14 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 test_cases_bp = Blueprint('test_cases', __name__)
 
-# Initialize agents
-test_case_mapping_agent = TestCaseMappingAgent()
+# Initialize agents with error handling
+test_case_mapping_agent = None
+try:
+    test_case_mapping_agent = TestCaseMappingAgent()
+    logger.info("TestCaseMappingAgent initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize TestCaseMappingAgent: {str(e)}")
+    # Continue without the agent - core app functionality remains available
 
 @test_cases_bp.route('/test-cases', methods=['POST'])
 def generate_test_case():
@@ -32,38 +36,33 @@ def generate_test_case():
             logger.error("Missing requirement in request data")
             return jsonify({"error": "Requirement text is required"}), 400
 
+        if not test_case_mapping_agent:
+            logger.error("Test case mapping agent not available")
+            return jsonify({
+                "error": "Service temporarily unavailable",
+                "message": "Test case generation service is initializing or offline"
+            }), 503
+
         requirement_text = data['requirement']
         logger.info(f"Processing requirement: {requirement_text}")
 
-        # Generate test case using the mapping agent
-        try:
-            test_case = test_case_mapping_agent.execute_task({
-                'requirement': {
-                    'description': requirement_text,
-                    'project_key': data.get('project_key')
-                }
-            })
-            logger.debug(f"Test case mapping result: {test_case}")
-
-            if not test_case or 'test_case' not in test_case:
-                logger.error(f"Test case mapping failed: {test_case}")
-                return jsonify({"error": "Failed to generate test case"}), 500
-
-            # Format response
-            response = {
-                "status": "success",
-                "test_case": test_case['test_case'],
-                "storage_status": test_case.get('storage', {})
+        result = test_case_mapping_agent.execute_task({
+            'requirement': {
+                'description': requirement_text,
+                'project_key': data.get('project_key')
             }
+        })
 
-            return jsonify(response), 201
+        response = {
+            "status": "success",
+            "test_case": result['test_case'],
+            "storage_status": result.get('storage', {})
+        }
 
-        except Exception as e:
-            logger.error(f"Error in test case generation: {str(e)}", exc_info=True)
-            return jsonify({"error": f"Test case generation error: {str(e)}"}), 500
+        return jsonify(response), 201
 
     except Exception as e:
-        logger.error(f"General error in generate_test_case: {str(e)}", exc_info=True)
+        logger.error(f"Error in generate_test_case: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @test_cases_bp.route('/test-cases/search', methods=['GET'])
@@ -76,17 +75,16 @@ def search_test_cases():
 
         logger.info(f"Received search request with query: {query}")
 
-        # Search using the test case mapping agent which handles both vector and memory search
-        logger.info("Executing search using test case mapping agent...")
+        if not test_case_mapping_agent:
+            logger.error("Test case mapping agent not available")
+            return jsonify({
+                "status": "error",
+                "message": "Search service temporarily unavailable",
+                "results": []
+            }), 200  # Return empty results instead of error
+
         results = test_case_mapping_agent.query_test_cases(query)
-
-        logger.info(f"Found {len(results)} test cases matching query: {query}")
-        logger.debug(f"Search results: {results}")
-
-        # Ensure we have a valid list of results
-        if not isinstance(results, list):
-            logger.error("Invalid results format received from search")
-            results = []
+        logger.info(f"Found {len(results)} test cases")
 
         return jsonify({
             "status": "success",
@@ -97,24 +95,27 @@ def search_test_cases():
     except Exception as e:
         logger.error(f"Error searching test cases: {str(e)}", exc_info=True)
         return jsonify({
-            "error": str(e),
             "status": "error",
-            "results": [],
-            "total": 0
-        }), 500
+            "message": str(e),
+            "results": []
+        }), 200  # Return empty results with error message
 
 @test_cases_bp.route('/test-cases/<name>', methods=['GET'])
 def get_test_case(name):
     """Get a test case by name"""
     try:
-        weaviate_client = WeaviateIntegration()
-        result = weaviate_client.get_test_case(name)
+        if not test_case_mapping_agent or not test_case_mapping_agent.weaviate_client:
+            logger.error("Test case service not available")
+            return jsonify({
+                "error": "Service temporarily unavailable"
+            }), 503
 
+        result = test_case_mapping_agent.weaviate_client.get_test_case(name)
         if result is None:
             return jsonify({"error": "Test case not found"}), 404
 
         return jsonify({"status": "success", "test_case": result}), 200
 
     except Exception as e:
-        logger.error(f"Error retrieving test case: {str(e)}")
+        logger.error(f"Error retrieving test case: {str(e)}", exc_info=True)
         return jsonify({"error": str(e)}), 500

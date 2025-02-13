@@ -31,7 +31,7 @@ task = "packager.installForAll"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PYTHONPATH=/home/runner/workspace python app.py"
+args = "PYTHONPATH=/home/runner/workspace python main.py"
 waitForPort = 5000
 
 [[ports]]

@@ -3,31 +3,25 @@ import logging
 from typing import Dict, List, Optional, Any
 
 from integrations.models import TestCase, TestCaseFormat
-from .base_agent import BaseAgent, AgentConfig
-from integrations.weaviate_integration import WeaviateIntegration
 
-class TestCaseMappingAgent(BaseAgent):
+class TestCaseMappingAgent:
     """Agent responsible for mapping parsed requirements to formatted test cases"""
 
     def __init__(self):
         """Initialize the test case mapping agent with its configuration"""
-        config = AgentConfig(
-            agent_id="test_case_mapping_001",
-            role="Test Case Designer",
-            goal="Generate comprehensive test cases from structured requirements",
-            backstory="Expert in test case design and automation",
-            verbose=True
-        )
-        super().__init__(config)
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
+        # Initialize Weaviate client with graceful fallback
+        self.weaviate_client = None
         try:
-            # Initialize Weaviate client
+            from integrations.weaviate_integration import WeaviateIntegration
             self.weaviate_client = WeaviateIntegration()
+            if not self.weaviate_client.is_healthy():
+                self.logger.warning("Weaviate client initialized but not healthy")
+                self.weaviate_client = None
         except Exception as e:
-            self.logger.error(f"Failed to initialize Weaviate client: {str(e)}")
-            raise RuntimeError(f"Weaviate client initialization failed: {str(e)}")
+            self.logger.warning(f"Failed to initialize Weaviate client: {str(e)}")
 
     def execute_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a test case mapping task"""
@@ -44,17 +38,20 @@ class TestCaseMappingAgent(BaseAgent):
             test_case_dict = test_case.to_weaviate_format()
             self.logger.debug(f"Generated test case: {test_case_dict}")
 
-            # Store in Weaviate
-            try:
-                weaviate_id = self.weaviate_client.store_test_case(test_case)
-                if not weaviate_id:
-                    raise Exception("Failed to store test case in Weaviate")
-
-                self.logger.info(f"Successfully stored test case in Weaviate with ID: {weaviate_id}")
-                weaviate_stored = True
-            except Exception as e:
-                self.logger.error(f"Failed to store in Weaviate: {str(e)}")
-                raise Exception(f"Vector database storage failed: {str(e)}")
+            # Store in Weaviate if available
+            weaviate_stored = False
+            if self.weaviate_client and self.weaviate_client.is_healthy():
+                try:
+                    weaviate_id = self.weaviate_client.store_test_case(test_case)
+                    if weaviate_id:
+                        self.logger.info(f"Successfully stored test case in Weaviate with ID: {weaviate_id}")
+                        weaviate_stored = True
+                    else:
+                        self.logger.warning("Failed to get Weaviate ID for stored test case")
+                except Exception as e:
+                    self.logger.error(f"Failed to store in Weaviate: {str(e)}")
+            else:
+                self.logger.warning("Weaviate storage skipped - client not available")
 
             # Return result
             return {
@@ -70,14 +67,17 @@ class TestCaseMappingAgent(BaseAgent):
             raise
 
     def query_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Search for test cases exclusively in vector database"""
+        """Search for test cases with graceful degradation"""
         try:
             self.logger.info(f"Searching for test cases with query: {query}")
+
+            if not self.weaviate_client or not self.weaviate_client.is_healthy():
+                self.logger.warning("Vector search unavailable - Weaviate client not healthy")
+                return []
 
             # Search in Weaviate
             results = self.weaviate_client.search_test_cases(query, limit)
             self.logger.info(f"Found {len(results)} test cases in Weaviate")
-            self.logger.debug(f"Search results: {results}")
             return results
 
         except Exception as e:
@@ -144,11 +144,3 @@ class TestCaseMappingAgent(BaseAgent):
             tags=["functional", "regression"],
             priority="medium"
         )
-
-    def update_status(self) -> Dict[str, Any]:
-        """Update and return the current status of the agent"""
-        status = super().update_status()
-        status.update({
-            "weaviate_connected": bool(self.weaviate_client._client)
-        })
-        return status
