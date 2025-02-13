@@ -21,9 +21,10 @@ class WeaviateIntegration:
             weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
 
             if not weaviate_api_key:
+                self.logger.error("❌ WEAVIATE_API_KEY is not set")
                 raise ValueError("WEAVIATE_API_KEY environment variable is required")
 
-            self.logger.debug(f"Attempting to connect to Weaviate at: {weaviate_url}")
+            self.logger.info(f"Attempting to connect to Weaviate at: {weaviate_url}")
 
             # Initialize client with retry logic
             retry_count = 0
@@ -38,18 +39,18 @@ class WeaviateIntegration:
 
                     # Test connection
                     if self.is_healthy():
-                        self.logger.info("✅ Weaviate client initialized successfully")
+                        self.logger.info("✅ Successfully connected to Weaviate")
                         self._create_schema()
                         break
                     else:
-                        raise ConnectionError("Health check failed")
+                        raise ConnectionError("Weaviate health check failed")
 
                 except Exception as e:
                     retry_count += 1
                     if retry_count == max_retries:
                         self.logger.error(f"❌ Failed to connect after {max_retries} attempts: {str(e)}")
                         raise
-                    self.logger.warning(f"Connection attempt {retry_count} failed, retrying...")
+                    self.logger.warning(f"Connection attempt {retry_count} failed, retrying in 2 seconds...")
                     time.sleep(2)  # Wait before retry
 
         except Exception as e:
@@ -61,13 +62,14 @@ class WeaviateIntegration:
         """Check if Weaviate is responding"""
         try:
             if not self.client:
+                self.logger.error("No Weaviate client available")
                 return False
 
             # Test live() and ready() endpoints
             is_live = self.client.is_live()
             is_ready = self.client.is_ready()
 
-            self.logger.debug(f"Weaviate status - Live: {is_live}, Ready: {is_ready}")
+            self.logger.info(f"Weaviate status - Live: {is_live}, Ready: {is_ready}")
             return is_live and is_ready
 
         except Exception as e:
