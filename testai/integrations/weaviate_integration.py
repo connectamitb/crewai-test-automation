@@ -17,13 +17,30 @@ class WeaviateIntegration:
     """Mock implementation of vector database integration"""
 
     def __init__(self):
-        """Initialize mock storage"""
-        self.client = weaviate.Client(
-            url=os.getenv("WEAVIATE_URL", "http://localhost:8080"),
-            auth_client_secret=weaviate.AuthApiKey(api_key=os.getenv("WEAVIATE_API_KEY")),
-        )
-        self._create_schema()
-        logging.info("Mock vector database initialized")
+        """Initialize Weaviate client with proper configuration"""
+        try:
+            self.client = weaviate.Client(
+                url=os.getenv("WEAVIATE_URL", "http://localhost:8080"),
+                auth_client_secret=weaviate.AuthApiKey(api_key=os.getenv("WEAVIATE_API_KEY")),
+                additional_headers={
+                    "X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY")
+                }
+            )
+            if self.is_healthy():
+                logging.info("Weaviate client initialized successfully")
+                self._create_schema()
+            else:
+                logging.warning("Weaviate health check failed")
+        except Exception as e:
+            logging.error(f"Failed to initialize Weaviate client: {str(e)}")
+            self.client = None
+
+    def is_healthy(self) -> bool:
+        """Check if Weaviate is responding"""
+        try:
+            return self.client.is_ready()
+        except Exception:
+            return False
 
     def _create_schema(self):
         """Create the test case schema in Weaviate"""

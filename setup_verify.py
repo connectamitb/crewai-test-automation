@@ -3,7 +3,10 @@ import os
 from dotenv import load_dotenv
 import logging
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(message)s'
+)
 logger = logging.getLogger(__name__)
 
 def verify_installation():
@@ -20,20 +23,17 @@ def verify_installation():
     for package in packages:
         try:
             importlib.import_module(package)
-            logger.info(f"✅ {package} installed successfully")
+            print(f"✅ {package}")  # Simplified log
         except ImportError as e:
-            logger.error(f"❌ {package} not installed: {str(e)}")
+            print(f"❌ {package}")  # Simplified log
             return False
     return True
 
 def verify_env_vars():
+    """Check if all required environment variables are set"""
     load_dotenv()
     required_vars = [
-        'OPENAI_API_KEY',
-        'WEAVIATE_URL',
-        'WEAVIATE_API_KEY',
-        'STORAGE_API_ENDPOINT',
-        'ZEPHYR_SCALE_TOKEN'
+        'OPENAI_API_KEY',  # Only checking for OpenAI key for now
     ]
     
     for var in required_vars:

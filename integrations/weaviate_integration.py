@@ -1,193 +1,101 @@
 """Weaviate integration for storing and retrieving test cases."""
 import os
-import time
 import logging
+from weaviate.client import WeaviateClient
+from weaviate.auth import AuthApiKey
+from weaviate.embedded import EmbeddedOptions
 from typing import Optional, Dict, List, Any
+import uuid
+from integrations.models import TestCase
 
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
 
-    def __init__(self, max_retries: int = 3, startup_period: int = 120):
+    def __init__(self, max_retries: int = 3):
         """Initialize Weaviate client with configuration"""
         self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.DEBUG)
-        self._client = None
         self.max_retries = max_retries
-        self.startup_period = startup_period
 
         try:
-            from weaviate import WeaviateClient, AuthApiKey
-            self._weaviate = WeaviateClient
-            self._auth = AuthApiKey
-            self.logger.debug("Successfully imported weaviate package")
-        except ImportError as e:
-            self.logger.error(f"Failed to import weaviate package: {str(e)}")
-            self._weaviate = None
-            self._auth = None
-            return
+            # Get credentials from environment
+            self.api_key = os.getenv("WEAVIATE_API_KEY")
+            openai_api_key = os.getenv("OPENAI_API_KEY")
 
-        try:
-            self._initialize_client()
+            # Create client with embedded options for local development
+            self.client = WeaviateClient(
+                embedded_options=EmbeddedOptions(),
+                auth_client_secret=AuthApiKey(api_key=self.api_key),
+                additional_headers={
+                    "X-OpenAI-Api-Key": openai_api_key
+                }
+            )
+
+            if self.is_healthy():
+                self.logger.info("✅ Weaviate client initialized successfully")
+                self._create_schema()
+            else:
+                self.logger.warning("❌ Weaviate health check failed")
+
         except Exception as e:
-            self.logger.error(f"Failed to initialize Weaviate client: {str(e)}")
-            # Continue without client, allowing degraded functionality
-
-    def _initialize_client(self) -> None:
-        """Initialize the Weaviate client with retries"""
-        if not self._weaviate:
-            return
-
-        self.api_key = os.environ.get('WEAVIATE_API_KEY')
-        if not self.api_key:
-            self.logger.warning("WEAVIATE_API_KEY not found, running in mock mode")
-            return
-
-        retry_count = 0
-        while retry_count < self.max_retries:
-            try:
-                self.logger.info(f"Attempting to initialize Weaviate client (attempt {retry_count + 1})")
-
-                # Initialize client with updated WeaviateClient class
-                self._client = self._weaviate(
-                    url="https://test-cases-crewai-b5c7k1op.weaviate.network",
-                    auth_client_secret=self._auth(api_key=self.api_key),
-                    additional_headers={
-                        "X-OpenAI-Api-Key": os.getenv("OPENAI_API_KEY", "")
-                    }
-                )
-
-                self.logger.debug("Testing connection to Weaviate")
-                if self._test_connection():
-                    self.logger.info("Weaviate client initialized and connected successfully")
-                    self._ensure_schema()
-                    return
-
-            except Exception as e:
-                self.logger.error(f"Weaviate initialization attempt {retry_count + 1} failed: {str(e)}")
-                self.logger.debug(f"Full error details: {str(e)}", exc_info=True)
-                retry_count += 1
-
-                if retry_count < self.max_retries:
-                    wait_time = min(2 ** retry_count, 30)
-                    self.logger.info(f"Waiting {wait_time} seconds before retry")
-                    time.sleep(wait_time)
-
-        self.logger.error(f"Failed to initialize Weaviate client after {self.max_retries} attempts")
-        self._client = None
-
-    def _test_connection(self) -> bool:
-        """Test the Weaviate connection"""
-        try:
-            if not self._client:
-                return False
-
-            # Test schema access
-            self._client.schema.get()
-            return True
-        except Exception as e:
-            self.logger.error(f"Connection test failed: {str(e)}")
-            self.logger.debug("Full connection test error:", exc_info=True)
-            return False
+            self.logger.error(f"❌ Failed to initialize Weaviate client: {str(e)}")
+            self.client = None
 
     def is_healthy(self) -> bool:
-        """Check if the Weaviate client is healthy and connected"""
+        """Check if Weaviate is responding"""
         try:
-            return bool(self._client and self._test_connection())
-        except Exception as e:
-            self.logger.error(f"Health check failed: {str(e)}")
+            if not self.client:
+                return False
+            return self.client.is_ready()
+        except Exception:
             return False
 
-    def _ensure_schema(self) -> None:
-        """Ensure the required schema exists"""
-        if not self._client:
-            return
-
+    def _create_schema(self):
+        """Create the test case schema in Weaviate"""
         schema = {
             "class": "TestCase",
-            "description": "Test case information",
             "vectorizer": "text2vec-openai",
             "properties": [
-                {
-                    "name": "title",
-                    "dataType": ["text"],
-                    "description": "Test case title"
-                },
-                {
-                    "name": "description",
-                    "dataType": ["text"],
-                    "description": "Test case description"
-                },
-                {
-                    "name": "format",
-                    "dataType": ["object"],
-                    "description": "Test case format",
-                    "properties": [
-                        {
-                            "name": "given",
-                            "dataType": ["text[]"]
-                        },
-                        {
-                            "name": "when",
-                            "dataType": ["text[]"]
-                        },
-                        {
-                            "name": "then",
-                            "dataType": ["text[]"]
-                        }
-                    ]
-                },
-                {
-                    "name": "metadata",
-                    "dataType": ["object"],
-                    "description": "Additional test case metadata"
-                }
+                {"name": "name", "dataType": ["text"]},
+                {"name": "objective", "dataType": ["text"]},
+                {"name": "precondition", "dataType": ["text"]},
+                {"name": "steps", "dataType": ["text[]"]},
+                {"name": "requirement", "dataType": ["text"]},
+                {"name": "gherkin", "dataType": ["text"]}
             ]
         }
 
         try:
-            self.logger.debug("Checking for existing TestCase schema")
-            existing_schema = self._client.schema.get()
-            if existing_schema and "classes" in existing_schema:
-                existing_classes = [c["class"] for c in existing_schema["classes"]]
-                if "TestCase" not in existing_classes:
-                    self.logger.info("Creating TestCase schema in Weaviate")
-                    self._client.schema.create_class(schema)
-                    self.logger.info("Created TestCase schema successfully")
-                else:
-                    self.logger.info("TestCase schema already exists")
-            else:
-                self.logger.warning("Could not verify schema, response format unexpected")
-
+            self.client.schema.create_class(schema)
+            self.logger.info("Schema created successfully")
         except Exception as e:
-            self.logger.error(f"Schema creation failed: {str(e)}")
-            # Continue without schema creation
+            self.logger.warning(f"Schema creation skipped: {str(e)}")
 
-    def store_test_case(self, test_case: Any) -> Optional[str]:
+    def store_test_case(self, test_case: TestCase) -> Optional[str]:
         """Store a test case in Weaviate"""
         if not self.is_healthy():
             self.logger.error("Weaviate client not healthy")
             return None
 
         try:
+            # Convert test case to Weaviate format
             weaviate_data = test_case.to_weaviate_format()
-            self.logger.debug(f"Attempting to store test case: {weaviate_data}")
 
-            # Only attempt to store if client is available
-            if self._client:
-                uuid = self._client.data_object.create(
-                    data_object=weaviate_data,
-                    class_name="TestCase"
-                )
-                if uuid:
-                    self.logger.info(f"Successfully stored test case with ID: {uuid}")
-                    return uuid
-            else:
-                self.logger.warning("Store operation skipped - client unavailable")
+            # Generate UUID for the test case
+            test_case_id = str(uuid.uuid4())
+
+            # Store in Weaviate
+            self.client.data_object.create(
+                data_object=weaviate_data,
+                class_name="TestCase",
+                uuid=test_case_id
+            )
+
+            self.logger.info(f"✅ Stored test case: {test_case.name}")
+            return test_case_id
 
         except Exception as e:
-            self.logger.error(f"Failed to store test case: {str(e)}")
-
-        return None
+            self.logger.error(f"❌ Failed to store test case: {str(e)}")
+            return None
 
     def search_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search for test cases using vector similarity"""
@@ -196,13 +104,16 @@ class WeaviateIntegration:
             return []
 
         try:
-            if not self._client:
-                self.logger.warning("Search operation skipped - client unavailable")
-                return []
-
             result = (
-                self._client.query
-                .get("TestCase", ["title", "description", "format", "metadata"])
+                self.client.query
+                .get("TestCase", [
+                    "name", 
+                    "objective", 
+                    "precondition", 
+                    "steps", 
+                    "requirement",
+                    "gherkin"
+                ])
                 .with_near_text({"concepts": [query]})
                 .with_limit(limit)
                 .do()
@@ -226,15 +137,11 @@ class WeaviateIntegration:
             return None
 
         try:
-            if not self._client:
-                self.logger.warning("Get operation skipped - client unavailable")
-                return None
-
             result = (
-                self._client.query
-                .get("TestCase", ["title", "description", "format", "metadata"])
+                self.client.query
+                .get("TestCase", ["name", "objective", "precondition", "steps", "requirement", "gherkin"])
                 .with_where({
-                    "path": ["title"],
+                    "path": ["name"],
                     "operator": "Equal",
                     "valueString": name
                 })

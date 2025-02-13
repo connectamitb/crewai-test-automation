@@ -1,0 +1,48 @@
+from pydantic import BaseModel
+from typing import Dict, List, Optional
+
+class AISettings(BaseModel):
+    """AI configuration settings"""
+    
+    # OpenAI Configuration
+    model_name: str = "gpt-4-turbo-preview"
+    temperature: float = 0.7
+    max_tokens: int = 2000
+    
+    # CrewAI Configuration
+    agent_configs: Dict[str, Dict] = {
+        "test_designer": {
+            "name": "Test Case Designer",
+            "role": "Manual Test Case Designer",
+            "goal": "Create comprehensive test cases in Gherkin format",
+            "backstory": "Expert in BDD and test case design with deep understanding of Gherkin syntax",
+            "verbose": True,
+            "allow_delegation": False
+        },
+        "storage_manager": {
+            "name": "Storage Manager",
+            "role": "Storage Integration Manager",
+            "goal": "Store and manage test cases across multiple backends",
+            "backstory": "Expert in data persistence and integration systems",
+            "verbose": True,
+            "allow_delegation": False
+        }
+    }
+    
+    # Weaviate Configuration
+    vector_store_settings: Dict[str, any] = {
+        "batch_size": 100,
+        "dynamic_batching": True,
+        "similarity_metric": "cosine",
+        "vector_index_type": "hnsw",
+        "ef": 128,
+        "max_connections": 64
+    }
+    
+    # Logging Configuration
+    ai_log_level: str = "INFO"
+    enable_debug_logs: bool = False
+    log_responses: bool = True
+
+# Create a global instance
+ai_settings = AISettings() 

@@ -6,5 +6,4 @@ openai
 pydantic
 pydantic-settings
 langchain
-langchain-openai 
-weaviate-client>=4.0.0
+langchain-openai

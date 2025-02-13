@@ -7,13 +7,10 @@ from dotenv import load_dotenv
 import traceback
 from integrations.weaviate_integration import WeaviateIntegration
 
-# Configure logging with more detail
+# Configure logging with minimal detail
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    level=logging.INFO,
+    format='%(message)s'
 )
 logger = logging.getLogger(__name__)
 
@@ -83,13 +80,14 @@ def search_test_cases():
         logger.error(f"Error searching test cases: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-@app.route('/health')
+@app.route('/api/health', methods=['GET'])
 def health_check():
-    """Check if all components are healthy"""
-    return jsonify({
-        "status": "healthy",
-        "weaviate": weaviate_client is not None and weaviate_client.is_healthy()
-    })
+    status = {
+        'weaviate': weaviate_client.is_healthy() if weaviate_client else False,
+        'openai_key': bool(os.getenv('OPENAI_API_KEY')),
+        'server': True
+    }
+    return jsonify(status)
 
 @app.errorhandler(404)
 def not_found(error):

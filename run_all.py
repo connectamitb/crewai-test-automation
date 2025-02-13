@@ -5,32 +5,47 @@ import webbrowser
 import os
 from dotenv import load_dotenv
 import logging
+import importlib
 
-# Configure logging
+# Configure basic logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(message)s'  # Simplified format
 )
 logger = logging.getLogger(__name__)
 
 def check_dependencies():
     """Check if all required packages are installed"""
-    required = [
-        'flask',
-        'python-dotenv',
-        'crewai',
-        'weaviate-client',
-        'openai',
-        'pydantic',
-        'pydantic-settings'
-    ]
+    required_packages = {
+        'flask': 'flask',
+        'python-dotenv': 'dotenv',
+        'crewai': 'crewai',
+        'weaviate-client': 'weaviate',
+        'openai': 'openai',
+        'pydantic': 'pydantic'
+    }
     
-    for package in required:
+    missing_packages = []
+    
+    for package_name, import_name in required_packages.items():
         try:
-            __import__(package)
+            importlib.import_module(import_name)
+            print(f"✅ {package_name}")  # Simplified log
         except ImportError:
-            logger.error(f"Missing required package: {package}")
+            print(f"❌ {package_name}")  # Simplified log
+            missing_packages.append(package_name)
+    
+    if missing_packages:
+        logger.info("Installing missing packages...")
+        try:
+            for package in missing_packages:
+                subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+            logger.info("Successfully installed missing packages")
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to install packages: {str(e)}")
             return False
+    
     return True
 
 def check_env_vars():
@@ -49,10 +64,14 @@ def check_env_vars():
     return True
 
 def main():
-    # Check dependencies
+    # Check dependencies first
     if not check_dependencies():
-        logger.error("Missing dependencies. Please install required packages.")
+        logger.error("Failed to install required packages. Please install them manually:")
+        logger.error("pip install -r requirements.txt")
         return
+    
+    # Now that dependencies are installed, we can import dotenv
+    from dotenv import load_dotenv
     
     # Check environment variables
     if not check_env_vars():

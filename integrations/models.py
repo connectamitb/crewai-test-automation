@@ -9,35 +9,23 @@ class TestStep(BaseModel):
     expected_result: str
 
 class TestCase(BaseModel):
-    """Test case model with full functionality"""
+    """Test case data model"""
     name: str
     objective: str
-    precondition: Optional[str] = None
-    automation_needed: Optional[str] = "TBD"
-    steps: List[Dict[str, str]]
-    tags: Optional[List[str]] = None
-    priority: str = "Normal"
-    metadata: Optional[Dict] = None
+    precondition: str
+    steps: List[str]
+    requirement: str
+    gherkin: str
 
     def to_weaviate_format(self) -> Dict:
-        """Convert to Weaviate-compatible format"""
-        metadata_dict = {
-            "tags": self.tags or [],
-            "priority": self.priority,
-            "automation_needed": self.automation_needed
-        }
-        if self.metadata:
-            metadata_dict.update(self.metadata)
-
+        """Convert to Weaviate data format"""
         return {
-            "title": self.name,
-            "description": self.objective,
-            "format": {
-                "given": [self.precondition] if self.precondition else [],
-                "when": [step["step"] for step in self.steps],
-                "then": [step["expected_result"] for step in self.steps]
-            },
-            "metadata": metadata_dict
+            "name": self.name,
+            "objective": self.objective,
+            "precondition": self.precondition,
+            "steps": self.steps,
+            "requirement": self.requirement,
+            "gherkin": self.gherkin
         }
 
 class TestSuite(BaseModel):
