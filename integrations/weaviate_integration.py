@@ -5,6 +5,7 @@ import weaviate
 from typing import Optional, Dict, List, Any
 import uuid
 from integrations.models import TestCase
+import time
 
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
@@ -22,18 +23,34 @@ class WeaviateIntegration:
             if not weaviate_api_key:
                 raise ValueError("WEAVIATE_API_KEY environment variable is required")
 
-            # Initialize client with v3.25.3 compatible configuration
-            self.client = weaviate.Client(
-                url=weaviate_url,
-                auth_client_secret=weaviate.AuthApiKey(api_key=weaviate_api_key)
-            )
+            self.logger.debug(f"Attempting to connect to Weaviate at: {weaviate_url}")
 
-            if self.is_healthy():
-                self.logger.info("✅ Weaviate client initialized successfully")
-                self._create_schema()
-            else:
-                self.logger.error("❌ Weaviate health check failed")
-                self.client = None
+            # Initialize client with retry logic
+            retry_count = 0
+            max_retries = 3
+            while retry_count < max_retries:
+                try:
+                    self.client = weaviate.Client(
+                        url=weaviate_url,
+                        auth_client_secret=weaviate.AuthApiKey(api_key=weaviate_api_key),
+                        timeout_config=(5, 15)  # (connect timeout, read timeout)
+                    )
+
+                    # Test connection
+                    if self.is_healthy():
+                        self.logger.info("✅ Weaviate client initialized successfully")
+                        self._create_schema()
+                        break
+                    else:
+                        raise ConnectionError("Health check failed")
+
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count == max_retries:
+                        self.logger.error(f"❌ Failed to connect after {max_retries} attempts: {str(e)}")
+                        raise
+                    self.logger.warning(f"Connection attempt {retry_count} failed, retrying...")
+                    time.sleep(2)  # Wait before retry
 
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize Weaviate client: {str(e)}")
@@ -45,7 +62,14 @@ class WeaviateIntegration:
         try:
             if not self.client:
                 return False
-            return self.client.is_ready()
+
+            # Test live() and ready() endpoints
+            is_live = self.client.is_live()
+            is_ready = self.client.is_ready()
+
+            self.logger.debug(f"Weaviate status - Live: {is_live}, Ready: {is_ready}")
+            return is_live and is_ready
+
         except Exception as e:
             self.logger.error(f"Health check failed: {str(e)}")
             return False
@@ -60,7 +84,7 @@ class WeaviateIntegration:
 
             schema = {
                 "class": "TestCase",
-                "vectorizer": "text2vec-openai",  # This can be changed based on your needs
+                "vectorizer": "text2vec-contextionary",  # Changed to default vectorizer
                 "properties": [
                     {
                         "name": "name",
