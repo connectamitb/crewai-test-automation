@@ -15,14 +15,22 @@ test_cases_bp = Blueprint('test_cases', __name__)
 def create_test_case():
     """Create and store a test case"""
     try:
+        logger.debug("Received test case creation request")
         data = request.get_json()
-        if not data or 'requirement' not in data:
-            return jsonify({'error': 'Missing requirement'}), 400
+        if not data:
+            logger.warning("No JSON data received")
+            return jsonify({'error': 'Missing request data'}), 400
+
+        if 'requirement' not in data:
+            logger.warning("Missing requirement in request data")
+            return jsonify({'error': 'Missing requirement field'}), 400
+
+        logger.debug(f"Creating test case with requirement: {data['requirement'][:50]}...")
 
         # Create test case with proper structure
         test_case = TestCase(
             name=f"TC_{int(time.time())}", # Unique name based on timestamp
-            objective=f"Verify requirement: {data['requirement'][:50]}...",
+            objective=data['requirement'][:200],  # First 200 chars as objective
             precondition="System is accessible and configured",
             steps=[
                 "Navigate to the feature",
@@ -30,31 +38,41 @@ def create_test_case():
                 "Verify the expected outcome"
             ],
             requirement=data['requirement'],
-            gherkin="""Feature: Requirement Verification
-  Scenario: Basic Verification
-    Given the system is accessible
-    When I perform the required action
+            gherkin="""Feature: Requirement Verification\n
+  Scenario: Basic Verification\n
+    Given the system is accessible\n
+    When I perform the required action\n
     Then I should see the expected outcome""".strip()
         )
 
-        weaviate_client = current_app.config['weaviate_client']
+        weaviate_client = current_app.config.get('weaviate_client')
         if not weaviate_client or not weaviate_client.is_healthy():
-            return jsonify({'error': 'Storage service unavailable'}), 503
+            logger.warning("Weaviate client unavailable, storing in memory only")
+            return jsonify({
+                'status': 'partial_success',
+                'message': 'Test case created but vector storage unavailable',
+                'test_case': test_case.model_dump()
+            }), 201
 
         case_id = weaviate_client.store_test_case(test_case)
         if not case_id:
-            return jsonify({'error': 'Failed to store test case'}), 500
+            logger.warning("Failed to store test case in Weaviate")
+            return jsonify({
+                'status': 'partial_success',
+                'message': 'Test case created but storage failed',
+                'test_case': test_case.model_dump()
+            }), 201
 
-        # Return detailed response
+        logger.info(f"Successfully created and stored test case with ID: {case_id}")
         return jsonify({
-            'id': case_id,
             'status': 'success',
-            'message': 'Test case created successfully',
-            'test_case': test_case.model_dump()  # Use model_dump() for Pydantic v2
+            'message': 'Test case created and stored successfully',
+            'test_case': test_case.model_dump(),
+            'id': case_id
         }), 201
 
     except Exception as e:
-        current_app.logger.error(f"Error creating test case: {str(e)}")
+        logger.error(f"Error creating test case: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @test_cases_bp.route('/api/v1/test-cases/search', methods=['GET'])
@@ -68,11 +86,9 @@ def search_test_cases():
                 "status": "success",
                 "message": "Please provide a search query",
                 "results": []
-            }), 200
+            })
 
         logger.info(f"Searching test cases with query: {query}")
-
-        # Get Weaviate client from app context
         weaviate_client = current_app.config.get('weaviate_client')
 
         if not weaviate_client or not weaviate_client.is_healthy():
@@ -86,26 +102,11 @@ def search_test_cases():
         results = weaviate_client.search_test_cases(query)
         logger.info(f"Found {len(results)} test cases")
 
-        # Transform results if needed to match frontend expectations
-        formatted_results = []
-        for result in results:
-            formatted_result = {
-                "name": result.get("title", "Untitled"),
-                "description": result.get("description", ""),
-                "format": result.get("format", {
-                    "given": [],
-                    "when": [],
-                    "then": []
-                }),
-                "metadata": result.get("metadata", {})
-            }
-            formatted_results.append(formatted_result)
-
         return jsonify({
             "status": "success",
-            "results": formatted_results,
-            "total": len(formatted_results)
-        }), 200
+            "results": results,
+            "total": len(results)
+        })
 
     except Exception as e:
         logger.error(f"Error searching test cases: {str(e)}", exc_info=True)
