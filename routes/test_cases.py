@@ -32,16 +32,33 @@ def create_test_case():
             logger.error("Missing requirement in request data")
             return jsonify({"error": "Requirement text is required"}), 400
 
-        # Create test case from requirement
+        # Format the test case data with required structure
+        formatted_test_case = {
+            "title": data.get('title', 'Test Case from Requirement'),
+            "description": data['requirement'],
+            "precondition": "System is accessible and ready for testing",
+            "steps": [],
+            "format": {
+                "given": ["System is accessible", "Test environment is ready"],
+                "when": ["User performs the required actions"],
+                "then": ["Expected outcomes are verified"]
+            },
+            "metadata": {
+                "priority": data.get('priority', 'Normal'),
+                "automation_needed": data.get('automation_needed', 'TBD'),
+                "tags": data.get('tags', [])
+            }
+        }
+
+        # Create test case instance
         test_case = TestCase(
-            name=data.get('title', 'Untitled Test Case'),
-            objective=data['requirement'],
-            precondition=data.get('precondition'),
-            automation_needed=data.get('automation_needed', 'TBD'),
-            steps=data.get('steps', []),
-            tags=data.get('tags', []),
-            priority=data.get('priority', 'Normal'),
-            metadata=data.get('metadata', {})
+            name=formatted_test_case['title'],
+            objective=formatted_test_case['description'],
+            precondition=formatted_test_case['precondition'],
+            automation_needed=formatted_test_case['metadata']['automation_needed'],
+            steps=formatted_test_case['steps'],
+            tags=formatted_test_case['metadata']['tags'],
+            priority=formatted_test_case['metadata']['priority']
         )
 
         # Get Weaviate client from app context
@@ -56,11 +73,13 @@ def create_test_case():
         else:
             logger.warning("Weaviate storage skipped - client unavailable")
 
+        # Return the formatted test case in the response
         response_data = {
             "status": "success",
-            "test_case": test_case.dict(),
+            "test_case": formatted_test_case,
             "storage_status": storage_status
         }
+
         logger.debug(f"Sending response: {response_data}")
         return jsonify(response_data), 201
 
