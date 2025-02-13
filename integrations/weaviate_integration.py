@@ -1,5 +1,8 @@
 """Weaviate integration for storing and retrieving test cases."""
 import os
+
+from weaviate.connect import WeaviateConnectionParams
+
 import logging
 from weaviate.client import WeaviateClient
 from weaviate.auth import AuthApiKey
@@ -21,12 +24,17 @@ class WeaviateIntegration:
             self.api_key = os.getenv("WEAVIATE_API_KEY")
             openai_api_key = os.getenv("OPENAI_API_KEY")
 
-            # Connect to existing Weaviate instance
-            self.client = WeaviateClient()
-            self.client.connect_to_local(
-                port=8079,
-                grpc_port=50060,
-                headers={
+            # Initialize Weaviate client with embedded options
+            self.client = WeaviateClient(
+                connection_params=WeaviateConnectionParams(
+                    http_host="127.0.0.1",
+                    http_port=8079,
+                    http_secure=False,
+                    grpc_host="127.0.0.1",
+                    grpc_port=50060,
+                    grpc_secure=False
+                ),
+                additional_headers={
                     "X-OpenAI-Api-Key": openai_api_key
                 }
             )
