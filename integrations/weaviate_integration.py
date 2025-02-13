@@ -23,13 +23,16 @@ class WeaviateIntegration:
 
             # Connect to existing Weaviate instance
             self.client = WeaviateClient(
-                url="http://localhost:8079",
+                embedded_options=EmbeddedOptions(
+                    hostname="0.0.0.0",
+                    port=8079,
+                    grpc_port=50060
+                ),
                 auth_client_secret=AuthApiKey(api_key=self.api_key),
                 additional_headers={
                     "X-OpenAI-Api-Key": openai_api_key
                 }
             )
-            self.client.connect()
 
             if self.is_healthy():
                 self.logger.info("✅ Weaviate client initialized successfully")
