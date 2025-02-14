@@ -10,7 +10,10 @@ import traceback
 # Configure logging
 logging.basicConfig(
     level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -22,6 +25,9 @@ logger.info("Environment variables loaded")
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_key_123")
+
+# Configure for Replit environment
+app.config['PREFERRED_URL_SCHEME'] = 'https'
 
 # Initialize Weaviate client lazily
 weaviate_client = None
@@ -59,10 +65,17 @@ except Exception as e:
     logger.error(f"Error registering blueprint: {str(e)}")
     logger.error(traceback.format_exc())
 
+@app.before_request
+def log_request_info():
+    """Log details about each request"""
+    logger.debug('Headers: %s', request.headers)
+    logger.debug('Body: %s', request.get_data())
+
 @app.route('/')
 def index():
     """Render the main page"""
     try:
+        logger.debug("Rendering index page")
         return render_template('index.html')
     except Exception as e:
         logger.error(f"Error rendering index page: {str(e)}")

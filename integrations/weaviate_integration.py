@@ -17,8 +17,12 @@ class WeaviateIntegration:
 
         try:
             # Get credentials from environment
-            weaviate_url = os.getenv("WEAVIATE_URL", "http://localhost:8080")
+            weaviate_url = os.getenv("WEAVIATE_URL")
             weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+
+            if not weaviate_url:
+                self.logger.error("❌ WEAVIATE_URL is not set")
+                raise ValueError("WEAVIATE_URL environment variable is required")
 
             if not weaviate_api_key:
                 self.logger.error("❌ WEAVIATE_API_KEY is not set")
@@ -34,7 +38,7 @@ class WeaviateIntegration:
                     self.client = weaviate.Client(
                         url=weaviate_url,
                         auth_client_secret=weaviate.AuthApiKey(api_key=weaviate_api_key),
-                        timeout_config=(5, 15)  # (connect timeout, read timeout)
+                        timeout_config=(10, 60)  # Increased timeouts (connect timeout, read timeout)
                     )
 
                     # Test connection
@@ -47,10 +51,11 @@ class WeaviateIntegration:
 
                 except Exception as e:
                     retry_count += 1
+                    self.logger.error(f"Connection attempt {retry_count} failed: {str(e)}")
                     if retry_count == max_retries:
                         self.logger.error(f"❌ Failed to connect after {max_retries} attempts: {str(e)}")
                         raise
-                    self.logger.warning(f"Connection attempt {retry_count} failed, retrying in 2 seconds...")
+                    self.logger.warning(f"Retrying in 2 seconds... ({retry_count}/{max_retries})")
                     time.sleep(2)  # Wait before retry
 
         except Exception as e:
@@ -65,15 +70,21 @@ class WeaviateIntegration:
                 self.logger.error("No Weaviate client available")
                 return False
 
-            # Test live() and ready() endpoints
+            # Test live() and ready() endpoints with detailed logging
             is_live = self.client.is_live()
             is_ready = self.client.is_ready()
 
-            self.logger.info(f"Weaviate status - Live: {is_live}, Ready: {is_ready}")
+            self.logger.info(f"Weaviate health check - Live: {is_live}, Ready: {is_ready}")
+
+            if not is_live:
+                self.logger.error("Weaviate is not live")
+            if not is_ready:
+                self.logger.error("Weaviate is not ready")
+
             return is_live and is_ready
 
         except Exception as e:
-            self.logger.error(f"Health check failed: {str(e)}")
+            self.logger.error(f"Health check failed with error: {str(e)}")
             return False
 
     def _create_schema(self):
