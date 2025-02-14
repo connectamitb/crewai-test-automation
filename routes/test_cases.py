@@ -135,8 +135,10 @@ def search_test_cases():
                 "results": []
             }), 503
 
+        logger.debug("Executing search with Weaviate client")
         results = weaviate_client.search_test_cases(query)
         logger.info(f"Found {len(results)} test cases")
+        logger.debug(f"Search results: {results}")
 
         return jsonify({
             "status": "success",

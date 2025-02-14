@@ -311,43 +311,44 @@ Acceptance Criteria:
     // Search Form Handler
     const searchForm = document.getElementById('searchForm');
     if (searchForm) {
-      searchForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
+        searchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
 
-        const query = document.getElementById('searchQuery').value;
-
-        try {
-          const response = await fetch('/api/v1/test-cases/search', {
-            method: 'GET',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ query })
-          });
-
-          const data = await response.json();
-
-          if (data.status === "success") {
+            const query = document.getElementById('searchQuery').value;
             const searchResults = document.getElementById('searchResults');
             const resultsList = document.getElementById('resultsList');
-            searchResults.classList.remove('hidden');
-            resultsList.innerHTML = '';
 
-            if (data.results && data.results.length > 0) {
-              data.results.forEach((result) => {
-                const resultCard = createResultCard(result);
-                resultsList.appendChild(resultCard);
-              });
-            } else {
-              resultsList.innerHTML = '<p class="text-gray-600">No test cases found matching your search.</p>';
+            try {
+                const response = await fetch(`/api/v1/test-cases/search?q=${encodeURIComponent(query)}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                console.log('Search response:', data);
+
+                searchResults.classList.remove('hidden');
+                resultsList.innerHTML = '';
+
+                if (data.status === "success") {
+                    if (data.results && data.results.length > 0) {
+                        data.results.forEach((result) => {
+                            const resultCard = createResultCard(result);
+                            resultsList.appendChild(resultCard);
+                        });
+                    } else {
+                        resultsList.innerHTML = '<p class="text-gray-600">No test cases found matching your search.</p>';
+                    }
+                } else {
+                    throw new Error(data.message || 'Search failed');
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                resultsList.innerHTML = `<p class="text-red-600">Error: ${error.message}</p>`;
             }
-          } else {
-            throw new Error(data.message || 'Search failed');
-          }
-        } catch (error) {
-          resultsList.innerHTML = `<p class="error">Error: ${error.message}</p>`;
-        }
-      });
+        });
     }
 
     function createResultCard(testCase) {
