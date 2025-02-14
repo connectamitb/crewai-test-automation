@@ -2,6 +2,8 @@
 import logging
 import os
 from flask import Blueprint, request, jsonify, current_app
+from agents.requirement_input import CleanedRequirement
+from agents.nlp_parsing import NLPParsingAgent
 from integrations.models import TestCase
 
 # Configure logging
@@ -28,40 +30,56 @@ def create_test_case():
             logger.error("Missing requirement field in request data")
             return jsonify({'error': 'Missing requirement field'}), 400
 
-        logger.debug("Processing requirement: %s", data['requirement'])
-
-        # Parse the input text
-        lines = data['requirement'].split('\n')
-        name = next((line for line in lines if line.strip()), "Test Case")
-        logger.debug("Extracted test case name: %s", name)
-
-        # Extract steps and expected results from the requirement text
-        steps = []
-        expected_results = []
-
-        for line in lines:
-            if line.lower().startswith("step:"):
-                steps.append(line.replace("step:", "").strip())
-            elif line.lower().startswith("expected result:"):
-                expected_results.append(line.replace("expected result:", "").strip())
-
-        # If no explicit steps/results found, create basic login steps
-        if not steps:
-            logger.debug("No explicit steps found, using default steps")
-            steps = ["Navigate to login page", "Enter credentials", "Click login button"]
-        if not expected_results:
-            logger.debug("No explicit expected results found, using default results")
-            expected_results = ["Login page displayed", "Credentials accepted", "User logged in"]
-
-        logger.debug("Steps: %s", steps)
-        logger.debug("Expected Results: %s", expected_results)
-
-        # Create a test case
-        test_case = TestCase(
-            name=name,
+        # Create cleaned requirement
+        cleaned_req = CleanedRequirement(
+            title="Test Case",
             description=data['requirement'],
-            steps=steps,
-            expected_results=expected_results
+            prerequisites=[],
+            acceptance_criteria=[]
+        )
+
+        # Parse requirements into lines
+        lines = data['requirement'].split('\n')
+        current_section = None
+
+        # Process each line to populate cleaned requirement
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            if "Prerequisites:" in line:
+                current_section = "prerequisites"
+                continue
+            elif "Acceptance Criteria:" in line:
+                current_section = "acceptance_criteria"
+                continue
+            elif "Description:" in line:
+                cleaned_req.description = line.replace("Description:", "").strip()
+                continue
+            elif not current_section and line:  # First non-empty line is title
+                cleaned_req.title = line
+                continue
+
+            # Add items to appropriate section
+            if current_section == "prerequisites" and line.startswith("-"):
+                cleaned_req.prerequisites.append(line[1:].strip())
+            elif current_section == "acceptance_criteria" and line.startswith("-"):
+                cleaned_req.acceptance_criteria.append(line[1:].strip())
+
+        logger.debug(f"Cleaned requirement: {cleaned_req}")
+
+        # Use NLP agent to generate structured test case
+        nlp_agent = NLPParsingAgent()
+        parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
+        logger.debug(f"Parsed test case: {parsed_test_case}")
+
+        # Convert parsed test case to storage format
+        test_case = TestCase(
+            name=parsed_test_case.name,
+            description=parsed_test_case.objective,
+            steps=[step["step"] for step in parsed_test_case.steps],
+            expected_results=[step["expected_result"] for step in parsed_test_case.steps]
         )
         logger.debug("Created TestCase object: %s", test_case)
 

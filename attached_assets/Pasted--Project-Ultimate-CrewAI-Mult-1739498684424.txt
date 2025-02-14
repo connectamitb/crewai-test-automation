@@ -1,0 +1,149 @@
+"""
+================================================================
+Project: Ultimate CrewAI Multi-Agent System Implementation
+================================================================
+
+Objective:
+Develop a complete, production-ready, self-updating CrewAI multi-agent system. The system must use explicit modules, methods, and design patterns as described below.
+
+Requirements:
+--------------
+1. Role-Based Agent Design:
+   - Create the following agents with explicit attributes: 
+       • DataCollectorAgent
+       • AnalyzerAgent
+       • StrategistAgent
+       • ManagerAgent
+       • ReporterAgent
+   - Each agent must have: a unique ID, role, goal, backstory, and settings.
+   - Use pydantic models for configuration validation.
+
+2. Autonomous Inter-Agent Delegation:
+   - Agents must implement:
+       • execute_task(task)
+       • delegate_task(task)
+       • update_status()
+       • handle_event(event)
+   - ManagerAgent must coordinate delegation and task reassignment.
+
+3. Flexible Task Management:
+   - Define a Task model (using pydantic) with:
+       • task_id, description, expected_output, execution mode (sync/async), priority, dependencies, timeout, retry_policy.
+   - Implement a TaskManager to schedule, execute, and retry tasks as needed.
+
+4. Crew Formation & Task Flows:
+   - Create a Crew class to group agents.
+   - Implement explicit methods:
+       • assign_task(task) — selects agents based on role/availability.
+       • kickoff() — initiates the crew’s workflow.
+   - Crew must aggregate crew-level events and metrics.
+
+5. Process Orchestration & Execution Strategies:
+   - Use the Strategy pattern to implement three execution strategies:
+       • SequentialStrategy — tasks run one after another.
+       • HierarchicalStrategy — ManagerAgent oversees task delegation.
+       • ConsensualStrategy — agents agree on task order.
+   - The ManagerAgent must implement a delegate_tasks(tasks) method.
+
+6. Event-Driven Flows (Observer Pattern):
+   - Implement an Event class and a Singleton EventManager.
+   - Agents must subscribe and publish events (e.g., task completed, error, configuration change).
+   - Ensure that handle_event(event) is implemented in all agents.
+
+7. Tool Integration via Facade:
+   - Create a ToolFacade class that provides a unified interface for:
+       • WebScraperTool
+       • FileReaderTool
+       • CodeInterpreterTool
+   - Support dynamic loading of custom tool plugins.
+   - The method execute_tool(tool_name, *args, **kwargs) must route to the correct tool.
+
+8. YAML Configuration & Self-Updating:
+   - Use YAML files (e.g., config.yaml) to define all settings for agents, tasks, orchestration, tools, and integrations.
+   - Implement a configuration loader that validates settings using pydantic.
+   - Integrate a file watcher (e.g., using watchdog) to detect YAML changes.
+   - On change, trigger a self-update: reload configuration and hot-swap modules as needed.
+
+9. External Integrations & Model Flexibility:
+   - Abstract an LLMInterface with methods:
+       • process_text(text: str) → str
+       • generate_response(prompt: str) → str
+   - Implement OpenAILLM (primary) and CohereLLM (fallback).
+   - Integrate Weaviate for vector database operations (insert, search, update, delete).
+
+10. Production-Grade Features:
+    - Implement robust error handling (try/except with retries based on retry_policy).
+    - Centralized logging and telemetry must be integrated.
+    - Maintain state management for each agent and a central state manager.
+    - Secure all inputs and manage secrets via environment variables.
+    - Use Dependency Injection to decouple modules.
+
+11. Testing & Zephyr Integration:
+    - Provide unit tests for all modules (agents, task manager, orchestration, events, tools).
+    - Provide integration tests that simulate full crew workflows.
+    - Expose endpoints or CLI commands for manual testing with Zephyr.
+
+12. Advanced Design Patterns & Code Quality:
+    - Implement the following design patterns:
+         • Factory Pattern for dynamic creation of agents/tasks.
+         • Singleton Pattern for EventManager and ConfigManager.
+         • Decorator Pattern for logging, caching, and error handling.
+         • Dependency Injection for module decoupling.
+    - All code must include inline comments and adhere strictly to PEP8.
+
+Project Structure:
+------------------
+project-root/
+├── config/
+│   ├── config.yaml         # Defines agents, tasks, tools, orchestration, integrations.
+│   └── config_loader.py    # Loads YAML and validates with pydantic.
+├── agents/
+│   ├── base_agent.py       # BaseAgent class with common methods.
+│   ├── data_collector.py   # DataCollectorAgent implementation.
+│   ├── analyzer.py         # AnalyzerAgent implementation.
+│   ├── strategist.py       # StrategistAgent implementation.
+│   ├── manager.py          # ManagerAgent implementation.
+│   └── reporter.py         # ReporterAgent implementation.
+├── tasks/
+│   ├── task.py             # Task model definition.
+│   └── task_manager.py     # TaskManager for scheduling and execution.
+├── orchestration/
+│   ├── execution_strategy.py   # Abstract ExecutionStrategy class.
+│   ├── sequential_strategy.py  # SequentialStrategy implementation.
+│   ├── hierarchical_strategy.py# HierarchicalStrategy implementation.
+│   └── consensual_strategy.py  # ConsensualStrategy implementation.
+├── events/
+│   ├── event.py            # Event class.
+│   └── event_manager.py    # Singleton EventManager.
+├── tools/
+│   ├── tool_facade.py      # Facade for tool integration.
+│   ├── web_scraper_tool.py # WebScraperTool implementation.
+│   ├── file_reader_tool.py # FileReaderTool implementation.
+│   └── code_interpreter_tool.py  # CodeInterpreterTool implementation.
+├── integrations/
+│   ├── llm_interface.py    # Abstract LLMInterface.
+│   ├── openai_llm.py       # OpenAILLM implementation.
+│   ├── cohere_llm.py       # CohereLLM implementation.
+│   └── weaviate_integration.py  # Weaviate integration.
+├── telemetry/
+│   ├── logger.py           # Centralized logging configuration.
+│   └── telemetry.py        # Telemetry and monitoring integration.
+└── tests/
+    ├── test_agents.py      # Unit tests for agents.
+    ├── test_tasks.py       # Unit tests for tasks and TaskManager.
+    ├── test_orchestration.py  # Tests for execution strategies.
+    ├── test_events.py      # Tests for EventManager and event flows.
+    └── test_tools.py       # Tests for ToolFacade and tool plugins.
+
+Instructions:
+-------------
+1. Follow the project structure exactly as specified.
+2. Implement every module with explicit methods and clear, unambiguous behavior.
+3. Self-updating must be implemented: configuration changes must automatically trigger module updates.
+4. All code must be documented with inline comments; no assumptions or interpretations are allowed.
+5. Adhere strictly to the outlined design patterns and requirements.
+
+Final Deliverable:
+------------------
+A complete, production-ready, self-updating CrewAI multi-agent system that exactly meets the specifications above.
+"""
