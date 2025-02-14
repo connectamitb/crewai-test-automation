@@ -13,35 +13,52 @@ class WeaviateIntegration:
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
 
-        # Get credentials from environment
-        weaviate_url = os.getenv("WEAVIATE_URL")
-        weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
-        openai_api_key = os.getenv("OPENAI_API_KEY")
-
-        if not weaviate_url or not weaviate_api_key or not openai_api_key:
-            self.logger.error("Missing required credentials:")
-            self.logger.debug(f"WEAVIATE_URL present: {bool(weaviate_url)}")
-            self.logger.debug(f"WEAVIATE_API_KEY present: {bool(weaviate_api_key)}")
-            self.logger.debug(f"OPENAI_API_KEY present: {bool(openai_api_key)}")
-            raise ValueError("Missing required credentials (WEAVIATE_URL, WEAVIATE_API_KEY, or OPENAI_API_KEY)")
-
-        # Initialize client with cloud connection
         try:
-            self.logger.debug(f"Attempting to connect to Weaviate Cloud at URL: {weaviate_url}")
-            self.client = weaviate.connect_to_weaviate_cloud(
-                cluster_url=weaviate_url,
-                auth_credentials=Auth.api_key(weaviate_api_key),
-                headers={
-                    "X-OpenAI-Api-Key": openai_api_key  # Required for text2vec-openai
-                }
-            )
-            self.logger.info("✅ Successfully connected to Weaviate Cloud")
+            # Get credentials from environment
+            weaviate_url = os.getenv("WEAVIATE_URL")
+            weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+            openai_api_key = os.getenv("OPENAI_API_KEY")
 
-            # Create schema if it doesn't exist
-            self._create_schema()
+            # Validate credentials
+            if not weaviate_url:
+                raise ValueError("WEAVIATE_URL is not set")
+            if not weaviate_api_key:
+                raise ValueError("WEAVIATE_API_KEY is not set")
+            if not openai_api_key:
+                raise ValueError("OPENAI_API_KEY is not set")
+
+            # Validate URL format
+            if not weaviate_url.startswith(("http://", "https://")):
+                raise ValueError(f"Invalid WEAVIATE_URL format: {weaviate_url}. Must start with http:// or https://")
+
+            self.logger.info(f"Attempting to connect to Weaviate at URL: {weaviate_url}")
+
+            # Initialize client with cloud connection
+            try:
+                self.client = weaviate.connect_to_weaviate_cloud(
+                    cluster_url=weaviate_url,
+                    auth_credentials=Auth.api_key(weaviate_api_key),
+                    headers={
+                        "X-OpenAI-Api-Key": openai_api_key
+                    }
+                )
+                self.logger.info("✅ Successfully connected to Weaviate Cloud")
+
+                # Verify connection immediately
+                if not self.client.is_ready():
+                    raise ConnectionError("Weaviate client created but not ready")
+
+                # Create schema if it doesn't exist
+                self._create_schema()
+
+            except Exception as conn_error:
+                self.logger.error(f"❌ Failed to connect to Weaviate: {str(conn_error)}")
+                self.logger.exception("Detailed connection error:")
+                raise
 
         except Exception as e:
-            self.logger.error(f"❌ Failed to connect to Weaviate: {str(e)}")
+            self.logger.error(f"❌ Weaviate initialization failed: {str(e)}")
+            self.logger.exception("Detailed initialization error:")
             raise
 
     def _create_schema(self):
@@ -126,28 +143,46 @@ class WeaviateIntegration:
         """Check if Weaviate is responding"""
         try:
             self.logger.debug("Checking Weaviate health status...")
-            is_ready = self.client.is_ready()
-            self.logger.info(f"Weaviate health check: {'✅ Ready' if is_ready else '❌ Not ready'}")
 
-            # Additional connection verification
-            if is_ready:
-                try:
-                    # Verify schema exists
-                    schema = self.client.schema.get()
-                    self.logger.debug(f"Retrieved schema: {schema}")
-                    if schema and any(c["class"] == "TestCase" for c in schema.get("classes", [])):
-                        self.logger.info("✅ TestCase schema exists and is accessible")
-                        return True
-                    else:
-                        self.logger.error("❌ TestCase schema not found")
-                        return False
-                except Exception as e:
-                    self.logger.error(f"❌ Schema verification failed: {str(e)}")
+            # First check basic client readiness
+            try:
+                is_ready = self.client.is_ready()
+                self.logger.info(f"Basic client readiness check: {'✅ Ready' if is_ready else '❌ Not ready'}")
+                if not is_ready:
                     return False
-            return is_ready
+            except Exception as e:
+                self.logger.error(f"❌ Basic client readiness check failed: {str(e)}")
+                return False
+
+            # Test connection by attempting to get schema
+            try:
+                schema = self.client.schema.get()
+                self.logger.debug(f"Retrieved schema: {schema}")
+
+                if not schema:
+                    self.logger.error("❌ Retrieved empty schema")
+                    return False
+
+                if not isinstance(schema, dict) or 'classes' not in schema:
+                    self.logger.error(f"❌ Invalid schema format: {schema}")
+                    return False
+
+                if any(c["class"] == "TestCase" for c in schema.get("classes", [])):
+                    self.logger.info("✅ TestCase schema exists and is accessible")
+                    return True
+                else:
+                    self.logger.error("❌ TestCase schema not found in schema")
+                    self._create_schema()  # Attempt to create schema
+                    return self.is_healthy()  # Recursive check after schema creation
+
+            except Exception as schema_error:
+                self.logger.error(f"❌ Schema verification failed: {str(schema_error)}")
+                return False
 
         except Exception as e:
-            self.logger.error(f"❌ Health check failed: {str(e)}")
+            self.logger.error(f"❌ Health check failed with error: {str(e)}")
+            # Log the full error details for debugging
+            self.logger.exception("Detailed error information:")
             return False
 
     def store_test_case(self, test_case) -> Optional[str]:
