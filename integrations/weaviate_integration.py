@@ -147,22 +147,33 @@ class WeaviateIntegration:
         try:
             # Convert test case to Weaviate format
             weaviate_data = test_case.to_weaviate_format()
+            self.logger.debug("Storing test case data: %s", weaviate_data)
 
             # Generate UUID for the test case
             test_case_id = str(uuid.uuid4())
 
             # Store in Weaviate
+            self.logger.info("Attempting to store test case with ID: %s", test_case_id)
             self.client.data_object.create(
                 data_object=weaviate_data,
                 class_name="TestCase",
                 uuid=test_case_id
             )
 
-            self.logger.info(f"✅ Stored test case: {test_case.name}")
+            self.logger.info("✅ Successfully stored test case: %s with ID: %s", test_case.name, test_case_id)
+
+            # Verify storage by attempting to retrieve
+            verification = self.get_test_case(test_case.name)
+            if verification:
+                self.logger.info("✅ Verified test case storage - retrieval successful")
+            else:
+                self.logger.error("❌ Failed to verify test case storage - could not retrieve stored case")
+                return None
+
             return test_case_id
 
         except Exception as e:
-            self.logger.error(f"❌ Failed to store test case: {str(e)}")
+            self.logger.error("❌ Failed to store test case: %s\n%s", str(e), traceback.format_exc())
             return None
 
     def search_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:

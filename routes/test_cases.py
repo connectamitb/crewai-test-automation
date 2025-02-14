@@ -67,45 +67,49 @@ def create_test_case():
             ],
             requirement=requirement_text,
             gherkin="""Feature: User Login Authentication
-
-  Scenario: Successful login with valid credentials
-    Given valid user account exists in the system
-    And user has correct email and password
-    And system is accessible via web browser
-    When user navigates to the login page
-    And enters valid email and password
-    And clicks the login button
-    Then system validates the credentials
-    And user is successfully logged in
-    And user is redirected to dashboard""".strip(),
+            
+              Scenario: Successful login with valid credentials
+                Given valid user account exists in the system
+                And user has correct email and password
+                And system is accessible via web browser
+                When user navigates to the login page
+                And enters valid email and password
+                And clicks the login button
+                Then system validates the credentials
+                And user is successfully logged in
+                And user is redirected to dashboard""".strip(),
             format=test_format
         )
 
-        weaviate_client = current_app.config.get('weaviate_client')
-        if not weaviate_client or not weaviate_client.is_healthy():
-            logger.warning("Weaviate client unavailable, storing in memory only")
+        try:
+            logger.debug("Creating test case with data: %s", data)
+            weaviate_client = current_app.config.get('weaviate_client')
+            if not weaviate_client or not weaviate_client.is_healthy():
+                logger.error("Weaviate client unavailable or unhealthy")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Vector storage service unavailable',
+                }), 503
+
+            case_id = weaviate_client.store_test_case(test_case)
+            if not case_id:
+                logger.error("Failed to store test case in Weaviate")
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to store test case',
+                }), 500
+
+            logger.info("Successfully created and stored test case with ID: %s", case_id)
             return jsonify({
-                'status': 'partial_success',
-                'message': 'Test case created but vector storage unavailable',
-                'test_case': test_case.model_dump()
+                'status': 'success',
+                'message': 'Test case created and stored successfully',
+                'test_case': test_case.model_dump(),
+                'id': case_id
             }), 201
 
-        case_id = weaviate_client.store_test_case(test_case)
-        if not case_id:
-            logger.warning("Failed to store test case in Weaviate")
-            return jsonify({
-                'status': 'partial_success',
-                'message': 'Test case created but storage failed',
-                'test_case': test_case.model_dump()
-            }), 201
-
-        logger.info(f"Successfully created and stored test case with ID: {case_id}")
-        return jsonify({
-            'status': 'success',
-            'message': 'Test case created and stored successfully',
-            'test_case': test_case.model_dump(),
-            'id': case_id
-        }), 201
+        except Exception as e:
+            logger.error("Error creating test case: %s", str(e), exc_info=True)
+            return jsonify({'error': str(e)}), 500
 
     except Exception as e:
         logger.error(f"Error creating test case: {str(e)}", exc_info=True)
