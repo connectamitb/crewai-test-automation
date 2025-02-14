@@ -17,18 +17,25 @@ test_cases_bp = Blueprint('test_cases', __name__)
 def create_test_case():
     """Create and store a test case"""
     try:
-        # Log environment variables (without values)
-        logger.debug("Checking environment variables...")
-        env_vars = ['WEAVIATE_URL', 'WEAVIATE_API_KEY', 'OPENAI_API_KEY']
-        for var in env_vars:
-            logger.debug(f"{var} is {'set' if os.getenv(var) else 'not set'}")
+        # First, verify OpenAI API key
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if not openai_key:
+            logger.error("OpenAI API key not found in environment")
+            return jsonify({
+                'status': 'error',
+                'message': 'OpenAI API key not configured'
+            }), 500
 
+        # Get request data
         data = request.get_json()
         logger.debug("Received request data: %s", data)
 
         if not data or 'requirement' not in data:
             logger.error("Missing requirement field in request data")
-            return jsonify({'error': 'Missing requirement field'}), 400
+            return jsonify({
+                'status': 'error',
+                'message': 'Missing requirement field'
+            }), 400
 
         # Create cleaned requirement
         cleaned_req = CleanedRequirement(
@@ -63,16 +70,25 @@ def create_test_case():
 
             # Add items to appropriate section
             if current_section == "prerequisites" and line.startswith("-"):
+                if cleaned_req.prerequisites is None:
+                    cleaned_req.prerequisites = []
                 cleaned_req.prerequisites.append(line[1:].strip())
             elif current_section == "acceptance_criteria" and line.startswith("-"):
                 cleaned_req.acceptance_criteria.append(line[1:].strip())
 
         logger.debug(f"Cleaned requirement: {cleaned_req}")
 
-        # Use NLP agent to generate structured test case
-        nlp_agent = NLPParsingAgent()
-        parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
-        logger.debug(f"Parsed test case: {parsed_test_case}")
+        try:
+            # Use NLP agent to generate structured test case
+            nlp_agent = NLPParsingAgent()
+            parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
+            logger.debug(f"Parsed test case: {parsed_test_case}")
+        except Exception as e:
+            logger.error(f"Error in NLP parsing: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to generate test case: {str(e)}'
+            }), 500
 
         # Convert parsed test case to storage format
         test_case = TestCase(
@@ -121,12 +137,15 @@ def create_test_case():
             logger.error("Failed to store test case - no ID returned")
             return jsonify({
                 'status': 'error',
-                'message': 'Failed to store test case'
+                'message': 'Failed to store test case in database'
             }), 500
 
     except Exception as e:
         logger.error("Error creating test case: %s", str(e), exc_info=True)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({
+            'status': 'error',
+            'message': f'Internal error: {str(e)}'
+        }), 500
 
 @test_cases_bp.route('/api/v1/test-cases/search', methods=['GET'])
 def search_test_cases():

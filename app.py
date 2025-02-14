@@ -34,6 +34,17 @@ def init_weaviate():
     """Initialize Weaviate client"""
     try:
         logger.info("Attempting to initialize Weaviate client...")
+        # Log Weaviate configuration (without sensitive values)
+        weaviate_url = os.getenv("WEAVIATE_URL")
+        weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+
+        if not weaviate_url or not weaviate_api_key:
+            logger.error("Missing Weaviate credentials")
+            logger.debug(f"WEAVIATE_URL present: {bool(weaviate_url)}")
+            logger.debug(f"WEAVIATE_API_KEY present: {bool(weaviate_api_key)}")
+            return False
+
+        logger.info(f"Initializing Weaviate with URL: {weaviate_url}")
         weaviate_client = WeaviateIntegration()
 
         if weaviate_client and weaviate_client.is_healthy():

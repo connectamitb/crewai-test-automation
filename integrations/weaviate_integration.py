@@ -19,11 +19,15 @@ class WeaviateIntegration:
         openai_api_key = os.getenv("OPENAI_API_KEY")
 
         if not weaviate_url or not weaviate_api_key or not openai_api_key:
+            self.logger.error("Missing required credentials:")
+            self.logger.debug(f"WEAVIATE_URL present: {bool(weaviate_url)}")
+            self.logger.debug(f"WEAVIATE_API_KEY present: {bool(weaviate_api_key)}")
+            self.logger.debug(f"OPENAI_API_KEY present: {bool(openai_api_key)}")
             raise ValueError("Missing required credentials (WEAVIATE_URL, WEAVIATE_API_KEY, or OPENAI_API_KEY)")
 
         # Initialize client with cloud connection
         try:
-            self.logger.debug("Attempting to connect to Weaviate Cloud...")
+            self.logger.debug(f"Attempting to connect to Weaviate Cloud at URL: {weaviate_url}")
             self.client = weaviate.connect_to_weaviate_cloud(
                 cluster_url=weaviate_url,
                 auth_credentials=Auth.api_key(weaviate_api_key),
