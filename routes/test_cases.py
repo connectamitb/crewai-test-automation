@@ -25,31 +25,59 @@ def create_test_case():
             logger.warning("Missing requirement in request data")
             return jsonify({'error': 'Missing requirement field'}), 400
 
-        logger.debug(f"Creating test case with requirement: {data['requirement'][:50]}...")
+        requirement_text = data['requirement']
+        logger.debug(f"Creating test case with requirement: {requirement_text[:50]}...")
 
-        # Create test format structure
+        # Parse the requirement text to extract relevant sections
+        lines = requirement_text.split('\n')
+        title = lines[0].strip()
+
+        # Create test format structure based on the login requirements
         test_format = TestFormat(
-            given=["System is accessible and configured"],
-            when=["Navigate to the feature", "Perform the required action"],
-            then=["Expected outcome is verified", "Test case is completed"]
+            given=[
+                "Valid user account exists in the system",
+                "User has correct email and password",
+                "System is accessible via web browser"
+            ],
+            when=[
+                "User navigates to the login page",
+                "User enters valid email and password",
+                "User clicks the login button"
+            ],
+            then=[
+                "System validates email format",
+                "System validates password requirements",
+                "User is successfully logged in",
+                "User is redirected to dashboard",
+                "Session is created for the user"
+            ]
         )
 
         # Create test case with proper structure
         test_case = TestCase(
-            name=f"TC_{int(time.time())}", # Unique name based on timestamp
-            objective=data['requirement'][:200],  # First 200 chars as objective
-            precondition="System is accessible and configured",
+            name=title,
+            objective=requirement_text[:200],  # First 200 chars as objective
+            precondition="Valid user account exists and system is accessible",
             steps=[
-                "Navigate to the feature",
-                "Perform the required action",
-                "Verify the expected outcome"
+                "Navigate to login page",
+                "Enter valid credentials",
+                "Submit login form",
+                "Verify successful login",
+                "Verify dashboard redirect"
             ],
-            requirement=data['requirement'],
-            gherkin="""Feature: Requirement Verification\n
-  Scenario: Basic Verification\n
-    Given the system is accessible\n
-    When I perform the required action\n
-    Then I should see the expected outcome""".strip(),
+            requirement=requirement_text,
+            gherkin="""Feature: User Login Authentication
+
+  Scenario: Successful login with valid credentials
+    Given valid user account exists in the system
+    And user has correct email and password
+    And system is accessible via web browser
+    When user navigates to the login page
+    And enters valid email and password
+    And clicks the login button
+    Then system validates the credentials
+    And user is successfully logged in
+    And user is redirected to dashboard""".strip(),
             format=test_format
         )
 
