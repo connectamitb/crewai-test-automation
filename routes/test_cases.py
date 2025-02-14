@@ -1,8 +1,7 @@
 """Routes for test case management"""
 import logging
 from flask import Blueprint, request, jsonify, current_app
-from integrations.models import TestCase, TestFormat
-import time
+from integrations.models import TestCase
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -15,151 +14,82 @@ test_cases_bp = Blueprint('test_cases', __name__)
 def create_test_case():
     """Create and store a test case"""
     try:
-        logger.debug("Received test case creation request")
         data = request.get_json()
-        if not data:
-            logger.warning("No JSON data received")
-            return jsonify({'error': 'Missing request data'}), 400
-
-        if 'requirement' not in data:
-            logger.warning("Missing requirement in request data")
+        if not data or 'requirement' not in data:
             return jsonify({'error': 'Missing requirement field'}), 400
 
-        requirement_text = data['requirement']
-        logger.debug("Creating test case with requirement: %s", requirement_text[:50])
-
-        # Create test format structure
-        test_format = TestFormat(
-            given=[
-                "Valid user account exists in the system",
-                "User has correct email and password",
-                "System is accessible via web browser"
-            ],
-            when=[
-                "User navigates to the login page",
-                "User enters valid email and password",
-                "User clicks the login button"
-            ],
-            then=[
-                "System validates email format",
-                "System validates password requirements",
-                "User is successfully logged in",
-                "User is redirected to dashboard",
-                "Session is created for the user"
-            ]
-        )
-
-        # Create test case with proper structure
+        # Create a simple test case
         test_case = TestCase(
-            name=data.get('project_key', 'Login Feature Test'),
-            objective=requirement_text[:200],
-            precondition="Valid user account exists and system is accessible",
+            name="Login Test",
+            description=data['requirement'],
             steps=[
                 "Navigate to login page",
                 "Enter valid credentials",
-                "Submit login form",
-                "Verify successful login",
-                "Verify dashboard redirect"
+                "Click login button"
             ],
-            requirement=requirement_text,
-            gherkin="""Feature: User Login Authentication
-
-              Scenario: Successful login with valid credentials
-                Given valid user account exists in the system
-                And user has correct email and password
-                And system is accessible via web browser
-                When user navigates to the login page
-                And enters valid email and password
-                And clicks the login button
-                Then system validates the credentials
-                And user is successfully logged in
-                And user is redirected to dashboard""".strip(),
-            format=test_format
+            expected_results=[
+                "Login page is displayed",
+                "Credentials are accepted",
+                "User is logged in successfully"
+            ]
         )
 
-        try:
-            logger.debug("Creating test case with data: %s", data)
-            weaviate_client = current_app.config.get('weaviate_client')
+        # Get Weaviate client
+        weaviate_client = current_app.config.get('weaviate_client')
+        if not weaviate_client:
+            return jsonify({
+                'status': 'error',
+                'message': 'Storage service not initialized'
+            }), 503
 
-            if not weaviate_client:
-                logger.error("Weaviate client not initialized")
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Vector storage service not initialized',
-                }), 503
-
-            if not weaviate_client.is_healthy():
-                logger.error("Weaviate client not healthy")
-                return jsonify({
-                    'status': 'error',
-                    'message': 'Vector storage service unhealthy',
-                }), 503
-
-            try:
-                case_id = weaviate_client.store_test_case(test_case)
-                logger.info("Successfully created and stored test case with ID: %s", case_id)
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Test case created and stored successfully',
-                    'test_case': test_case.model_dump(),
-                    'id': case_id
-                }), 201
-            except ValueError as ve:
-                logger.error("Failed to store test case: %s", str(ve))
-                return jsonify({
-                    'status': 'error',
-                    'message': str(ve)
-                }), 500
-
-        except Exception as e:
-            logger.error("Error during test case storage: %s", str(e), exc_info=True)
-            return jsonify({'error': str(e)}), 500
+        # Store the test case
+        case_id = weaviate_client.store_test_case(test_case)
+        if case_id:
+            return jsonify({
+                'status': 'success',
+                'message': 'Test case created successfully',
+                'test_case': test_case.model_dump(),
+                'id': case_id
+            }), 201
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to store test case'
+            }), 500
 
     except Exception as e:
-        logger.error("Error creating test case: %s", str(e), exc_info=True)
+        logger.error(f"Error creating test case: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @test_cases_bp.route('/api/v1/test-cases/search', methods=['GET'])
 def search_test_cases():
-    """Search for test cases using vector similarity search"""
+    """Search for test cases"""
     try:
         query = request.args.get('q', '')
         if not query:
-            logger.warning("Empty search query received")
-            return jsonify({
-                "status": "success",
-                "message": "Please provide a search query",
-                "results": []
-            })
-
-        logger.info(f"Searching test cases with query: {query}")
-        weaviate_client = current_app.config.get('weaviate_client')
-
-        if not weaviate_client or not weaviate_client.is_healthy():
-            logger.warning("Weaviate client not available for search")
             return jsonify({
                 "status": "error",
-                "message": "Search service temporarily unavailable",
-                "results": []
+                "message": "Search query is required"
+            }), 400
+
+        weaviate_client = current_app.config.get('weaviate_client')
+        if not weaviate_client:
+            return jsonify({
+                "status": "error",
+                "message": "Search service not available"
             }), 503
 
-        logger.debug("Executing search with Weaviate client")
         results = weaviate_client.search_test_cases(query)
-        logger.info(f"Found {len(results)} test cases")
-        logger.debug(f"Search results: {results}")
-
         return jsonify({
             "status": "success",
-            "results": results,
-            "total": len(results)
+            "results": results
         })
 
     except Exception as e:
-        logger.error(f"Error searching test cases: {str(e)}", exc_info=True)
+        logger.error(f"Search error: {str(e)}")
         return jsonify({
             "status": "error",
-            "message": str(e),
-            "results": []
+            "message": str(e)
         }), 500
 
 @test_cases_bp.route('/api/v1/test-cases/<name>', methods=['GET'])
