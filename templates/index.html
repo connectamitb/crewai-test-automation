@@ -109,26 +109,21 @@ Acceptance Criteria:
           <h3 class="text-xl font-bold mb-4">Generated Test Case</h3>
           <div class="bg-gray-50 p-4 rounded-lg border">
             <div class="mb-4">
-              <h4 class="font-semibold">Title:</h4>
+              <h4 class="font-semibold">Name:</h4>
               <p id="resultName" class="text-gray-700"></p>
             </div>
             <div class="mb-4">
               <h4 class="font-semibold">Description:</h4>
-              <p id="resultObjective" class="text-gray-700"></p>
+              <p id="resultDescription" class="text-gray-700"></p>
             </div>
             <div class="mb-4">
-              <h4 class="font-semibold">Given (Preconditions):</h4>
-              <ul id="resultGiven" class="list-disc list-inside text-gray-700">
+              <h4 class="font-semibold">Steps:</h4>
+              <ul id="resultSteps" class="list-disc list-inside text-gray-700">
               </ul>
             </div>
             <div class="mb-4">
-              <h4 class="font-semibold">When (Actions):</h4>
-              <ul id="resultWhen" class="list-disc list-inside text-gray-700">
-              </ul>
-            </div>
-            <div class="mb-4">
-              <h4 class="font-semibold">Then (Expected Results):</h4>
-              <ul id="resultThen" class="list-disc list-inside text-gray-700">
+              <h4 class="font-semibold">Expected Results:</h4>
+              <ul id="resultExpectedResults" class="list-disc list-inside text-gray-700">
               </ul>
             </div>
           </div>
@@ -237,19 +232,15 @@ Acceptance Criteria:
           const requirementText = document.getElementById('requirementText').value;
           const projectKey = document.getElementById('projectKey').value;
 
-          const requestData = {
-            requirement: requirementText,
-            project_key: projectKey
-          };
-
-          console.log('Sending request:', requestData);
-
           const response = await fetch('/api/v1/test-cases', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify(requestData)
+            body: JSON.stringify({
+                requirement: requirementText,
+                project_key: projectKey
+            })
           });
 
           const result = await response.json();
@@ -265,33 +256,24 @@ Acceptance Criteria:
 
           // Update result fields
           document.getElementById('resultName').textContent = result.test_case.name;
-          document.getElementById('resultObjective').textContent = result.test_case.objective;
+          document.getElementById('resultDescription').textContent = result.test_case.description;
 
-          // Update Given section
-          const givenList = document.getElementById('resultGiven');
-          givenList.innerHTML = '';
-          result.test_case.format.given.forEach(condition => {
+          // Update Steps
+          const stepsList = document.getElementById('resultSteps');
+          stepsList.innerHTML = '';
+          result.test_case.steps.forEach(step => {
             const li = document.createElement('li');
-            li.textContent = condition;
-            givenList.appendChild(li);
+            li.textContent = step;
+            stepsList.appendChild(li);
           });
 
-          // Update When section
-          const whenList = document.getElementById('resultWhen');
-          whenList.innerHTML = '';
-          result.test_case.format.when.forEach(action => {
-            const li = document.createElement('li');
-            li.textContent = action;
-            whenList.appendChild(li);
-          });
-
-          // Update Then section
-          const thenList = document.getElementById('resultThen');
-          thenList.innerHTML = '';
-          result.test_case.format.then.forEach(result => {
+          // Update Expected Results
+          const expectedResultsList = document.getElementById('resultExpectedResults');
+          expectedResultsList.innerHTML = '';
+          result.test_case.expected_results.forEach(result => {
             const li = document.createElement('li');
             li.textContent = result;
-            thenList.appendChild(li);
+            expectedResultsList.appendChild(li);
           });
 
           // Scroll to results

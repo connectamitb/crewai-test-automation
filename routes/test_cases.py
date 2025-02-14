@@ -18,20 +18,34 @@ def create_test_case():
         if not data or 'requirement' not in data:
             return jsonify({'error': 'Missing requirement field'}), 400
 
+        logger.debug("Processing requirement: %s", data['requirement'])
+
+        # Parse the input text
+        lines = data['requirement'].split('\n')
+        name = next((line for line in lines if line.strip()), "Test Case")
+
+        # Extract steps and expected results from the requirement text
+        steps = []
+        expected_results = []
+
+        for line in lines:
+            if line.lower().startswith("step:"):
+                steps.append(line.replace("step:", "").strip())
+            elif line.lower().startswith("expected result:"):
+                expected_results.append(line.replace("expected result:", "").strip())
+
+        # If no explicit steps/results found, create basic login steps
+        if not steps:
+            steps = ["Navigate to login page", "Enter credentials", "Click login button"]
+        if not expected_results:
+            expected_results = ["Login page displayed", "Credentials accepted", "User logged in"]
+
         # Create a simple test case
         test_case = TestCase(
-            name="Login Test",
+            name=name,
             description=data['requirement'],
-            steps=[
-                "Navigate to login page",
-                "Enter valid credentials",
-                "Click login button"
-            ],
-            expected_results=[
-                "Login page is displayed",
-                "Credentials are accepted",
-                "User is logged in successfully"
-            ]
+            steps=steps,
+            expected_results=expected_results
         )
 
         # Get Weaviate client
@@ -45,20 +59,26 @@ def create_test_case():
         # Store the test case
         case_id = weaviate_client.store_test_case(test_case)
         if case_id:
+            logger.info("Successfully stored test case with ID: %s", case_id)
             return jsonify({
                 'status': 'success',
                 'message': 'Test case created successfully',
-                'test_case': test_case.model_dump(),
-                'id': case_id
+                'test_case': {
+                    'name': test_case.name,
+                    'description': test_case.description,
+                    'steps': test_case.steps,
+                    'expected_results': test_case.expected_results
+                }
             }), 201
         else:
+            logger.error("Failed to store test case")
             return jsonify({
                 'status': 'error',
                 'message': 'Failed to store test case'
             }), 500
 
     except Exception as e:
-        logger.error(f"Error creating test case: {str(e)}")
+        logger.error("Error creating test case: %s", str(e), exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @test_cases_bp.route('/api/v1/test-cases/search', methods=['GET'])
@@ -86,7 +106,7 @@ def search_test_cases():
         })
 
     except Exception as e:
-        logger.error(f"Search error: {str(e)}")
+        logger.error("Search error: %s", str(e))
         return jsonify({
             "status": "error",
             "message": str(e)
