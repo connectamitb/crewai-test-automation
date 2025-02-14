@@ -1,7 +1,7 @@
 """Routes for test case management"""
 import logging
 from flask import Blueprint, request, jsonify, current_app
-from integrations.models import TestCase
+from integrations.models import TestCase, TestFormat
 import time
 
 # Configure logging
@@ -27,6 +27,13 @@ def create_test_case():
 
         logger.debug(f"Creating test case with requirement: {data['requirement'][:50]}...")
 
+        # Create test format structure
+        test_format = TestFormat(
+            given=["System is accessible and configured"],
+            when=["Navigate to the feature", "Perform the required action"],
+            then=["Expected outcome is verified", "Test case is completed"]
+        )
+
         # Create test case with proper structure
         test_case = TestCase(
             name=f"TC_{int(time.time())}", # Unique name based on timestamp
@@ -42,7 +49,8 @@ def create_test_case():
   Scenario: Basic Verification\n
     Given the system is accessible\n
     When I perform the required action\n
-    Then I should see the expected outcome""".strip()
+    Then I should see the expected outcome""".strip(),
+            format=test_format
         )
 
         weaviate_client = current_app.config.get('weaviate_client')

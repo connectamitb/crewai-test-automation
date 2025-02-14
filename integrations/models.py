@@ -2,11 +2,11 @@
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 
-class TestStep(BaseModel):
-    """Model for a test step"""
-    step: str
-    test_data: Optional[str] = None
-    expected_result: str
+class TestFormat(BaseModel):
+    """Format for test steps in Given/When/Then format"""
+    given: List[str]
+    when: List[str]
+    then: List[str]
 
 class TestCase(BaseModel):
     """Test case data model"""
@@ -16,6 +16,7 @@ class TestCase(BaseModel):
     steps: List[str]
     requirement: str
     gherkin: str
+    format: Optional[TestFormat] = None
 
     def to_weaviate_format(self) -> Dict:
         """Convert to Weaviate data format"""
@@ -25,7 +26,8 @@ class TestCase(BaseModel):
             "precondition": self.precondition,
             "steps": self.steps,
             "requirement": self.requirement,
-            "gherkin": self.gherkin
+            "gherkin": self.gherkin,
+            "format": self.format.dict() if self.format else None
         }
 
 class TestSuite(BaseModel):
