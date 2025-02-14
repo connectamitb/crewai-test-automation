@@ -16,9 +16,10 @@ class WeaviateIntegration:
         # Get credentials from environment
         weaviate_url = os.getenv("WEAVIATE_URL")
         weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+        openai_api_key = os.getenv("OPENAI_API_KEY")
 
-        if not weaviate_url or not weaviate_api_key:
-            raise ValueError("Missing required Weaviate credentials")
+        if not weaviate_url or not weaviate_api_key or not openai_api_key:
+            raise ValueError("Missing required credentials (WEAVIATE_URL, WEAVIATE_API_KEY, or OPENAI_API_KEY)")
 
         # Initialize client with cloud connection
         try:
@@ -26,6 +27,9 @@ class WeaviateIntegration:
             self.client = weaviate.connect_to_weaviate_cloud(
                 cluster_url=weaviate_url,
                 auth_credentials=Auth.api_key(weaviate_api_key),
+                headers={
+                    "X-OpenAI-Api-Key": openai_api_key  # Required for text2vec-openai
+                }
             )
             self.logger.info("✅ Successfully connected to Weaviate Cloud")
 
@@ -53,22 +57,46 @@ class WeaviateIntegration:
                 {
                     "name": "name",
                     "dataType": ["string"],
-                    "description": "The name of the test case"
+                    "description": "The name of the test case",
+                    "moduleConfig": {
+                        "text2vec-openai": {
+                            "skip": False,
+                            "vectorizePropertyName": True
+                        }
+                    }
                 },
                 {
                     "name": "description",
                     "dataType": ["text"],
-                    "description": "The description of the test case"
+                    "description": "The description of the test case",
+                    "moduleConfig": {
+                        "text2vec-openai": {
+                            "skip": False,
+                            "vectorizePropertyName": True
+                        }
+                    }
                 },
                 {
                     "name": "steps",
                     "dataType": ["text[]"],
-                    "description": "Test execution steps"
+                    "description": "Test execution steps",
+                    "moduleConfig": {
+                        "text2vec-openai": {
+                            "skip": False,
+                            "vectorizePropertyName": True
+                        }
+                    }
                 },
                 {
                     "name": "expectedResults",
                     "dataType": ["text[]"],
-                    "description": "Expected results for each step"
+                    "description": "Expected results for each step",
+                    "moduleConfig": {
+                        "text2vec-openai": {
+                            "skip": False,
+                            "vectorizePropertyName": True
+                        }
+                    }
                 }
             ]
         }
@@ -109,27 +137,17 @@ class WeaviateIntegration:
 
             # Store in Weaviate
             try:
-                # Create properties object as expected by Weaviate v4
-                properties = {
-                    "name": test_case_data["name"],
-                    "description": test_case_data["description"],
-                    "steps": test_case_data["steps"],
-                    "expectedResults": test_case_data["expectedResults"]
-                }
-
-                self.logger.debug(f"Creating data object with properties: {properties}")
-
-                # Create the object using the data object API
-                result = self.client.data_object.create(
+                # Create the object
+                uuid = self.client.data_object.create(
                     class_name="TestCase",
-                    properties=properties
+                    properties=test_case_data
                 )
 
-                if result:
-                    self.logger.info(f"✅ Successfully stored test case with ID: {result}")
-                    return result
+                if uuid:
+                    self.logger.info(f"✅ Successfully stored test case with ID: {uuid}")
+                    return uuid
                 else:
-                    self.logger.error("❌ No result returned from create operation")
+                    self.logger.error("❌ No UUID returned from create operation")
                     return None
 
             except Exception as e:
@@ -145,7 +163,7 @@ class WeaviateIntegration:
         try:
             self.logger.debug(f"Searching for test cases with query: {query}")
 
-            # Perform semantic search using v4 API
+            # Perform semantic search
             result = (
                 self.client.query
                 .get("TestCase", ["name", "description", "steps", "expectedResults"])
