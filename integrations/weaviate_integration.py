@@ -33,33 +33,67 @@ class WeaviateIntegration:
         schema = {
             "class": "TestCase",
             "vectorizer": "text2vec-contextionary",
+            "moduleConfig": {
+                "text2vec-contextionary": {
+                    "vectorizeClassName": True
+                }
+            },
             "properties": [
                 {
                     "name": "name",
                     "dataType": ["string"],
-                    "description": "The name of the test case"
+                    "description": "The name of the test case",
+                    "moduleConfig": {
+                        "text2vec-contextionary": {
+                            "vectorize": True,
+                            "skip": False
+                        }
+                    }
                 },
                 {
                     "name": "description",
                     "dataType": ["text"],
-                    "description": "The description of the test case"
+                    "description": "The description of the test case",
+                    "moduleConfig": {
+                        "text2vec-contextionary": {
+                            "vectorize": True,
+                            "skip": False
+                        }
+                    }
                 },
                 {
                     "name": "steps",
                     "dataType": ["text[]"],
-                    "description": "Test execution steps"
+                    "description": "Test execution steps",
+                    "moduleConfig": {
+                        "text2vec-contextionary": {
+                            "vectorize": True,
+                            "skip": False
+                        }
+                    }
                 },
                 {
                     "name": "expectedResults",
                     "dataType": ["text[]"],
-                    "description": "Expected results for each step"
+                    "description": "Expected results for each step",
+                    "moduleConfig": {
+                        "text2vec-contextionary": {
+                            "vectorize": True,
+                            "skip": False
+                        }
+                    }
                 }
             ]
         }
 
-        # Create schema if it doesn't exist
-        if not any(c["class"] == "TestCase" for c in self.client.schema.get().get("classes", [])):
-            self.client.schema.create_class(schema)
+        try:
+            # Create schema if it doesn't exist
+            if not any(c["class"] == "TestCase" for c in self.client.schema.get().get("classes", [])):
+                self.client.schema.create_class(schema)
+                self.logger.info("Created TestCase schema in Weaviate")
+        except Exception as e:
+            self.logger.error(f"Error creating schema: {str(e)}")
+            raise
 
     def is_healthy(self) -> bool:
         """Check if Weaviate is responding"""
@@ -75,9 +109,13 @@ class WeaviateIntegration:
             # Generate UUID for the test case
             test_case_id = str(uuid.uuid4())
 
+            # Convert to Weaviate format
+            test_case_data = test_case.to_weaviate_format()
+            self.logger.debug(f"Storing test case: {test_case_data}")
+
             # Store in Weaviate
             self.client.data_object.create(
-                data_object=test_case.to_weaviate_format(),
+                data_object=test_case_data,
                 class_name="TestCase",
                 uuid=test_case_id
             )
@@ -90,16 +128,25 @@ class WeaviateIntegration:
     def search_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search for test cases using vector similarity"""
         try:
+            self.logger.debug(f"Searching for test cases with query: {query}")
+
             result = (
                 self.client.query
                 .get("TestCase", ["name", "description", "steps", "expectedResults"])
-                .with_near_text({"concepts": [query]})
+                .with_near_text({
+                    "concepts": [query],
+                    "certainty": 0.7
+                })
+                .with_additional(["certainty"])
                 .with_limit(limit)
                 .do()
             )
 
+            self.logger.debug(f"Search result: {result}")
+
             if result and "data" in result and "Get" in result["data"]:
-                return result["data"]["Get"]["TestCase"]
+                test_cases = result["data"]["Get"]["TestCase"]
+                return test_cases
             return []
 
         except Exception as e:
