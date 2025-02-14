@@ -114,13 +114,19 @@ Acceptance Criteria:
               <p id="resultObjective" class="text-gray-700"></p>
             </div>
             <div class="mb-4">
-              <h4 class="font-semibold">Preconditions:</h4>
-              <p id="resultPrecondition" class="text-gray-700"></p>
+              <h4 class="font-semibold">Given (Preconditions):</h4>
+              <ul id="resultGiven" class="list-disc list-inside text-gray-700">
+              </ul>
             </div>
-            <div>
-              <h4 class="font-semibold mb-2">Test Steps:</h4>
-              <ol id="resultSteps" class="list-decimal list-inside space-y-2">
-              </ol>
+            <div class="mb-4">
+              <h4 class="font-semibold">When (Actions):</h4>
+              <ul id="resultWhen" class="list-disc list-inside text-gray-700">
+              </ul>
+            </div>
+            <div class="mb-4">
+              <h4 class="font-semibold">Then (Expected Results):</h4>
+              <ul id="resultThen" class="list-disc list-inside text-gray-700">
+              </ul>
             </div>
           </div>
         </div>
@@ -215,7 +221,6 @@ Acceptance Criteria:
           const requirementText = document.getElementById('requirementText').value;
           const projectKey = document.getElementById('projectKey').value;
 
-          // Create request payload
           const requestData = {
             requirement: requirementText,
             project_key: projectKey
@@ -223,7 +228,6 @@ Acceptance Criteria:
 
           console.log('Sending request:', requestData);
 
-          // Create test case
           const response = await fetch('/api/v1/test-cases', {
             method: 'POST',
             headers: {
@@ -244,37 +248,35 @@ Acceptance Criteria:
           resultSection.classList.remove('hidden');
 
           // Update result fields
-          document.getElementById('resultName').textContent = result.test_case.title;
-          document.getElementById('resultObjective').textContent = result.test_case.description;
-          document.getElementById('resultPrecondition').textContent = result.test_case.format.given.join('\n');
+          document.getElementById('resultName').textContent = result.test_case.name;
+          document.getElementById('resultObjective').textContent = result.test_case.objective;
 
-          // Update steps
-          const stepsList = document.getElementById('resultSteps');
-          stepsList.innerHTML = '';
-
-          result.test_case.format.when.forEach((step, index) => {
+          // Update Given section
+          const givenList = document.getElementById('resultGiven');
+          givenList.innerHTML = '';
+          result.test_case.format.given.forEach(condition => {
             const li = document.createElement('li');
-            li.innerHTML = `
-              <div class="ml-4">
-                <p class="font-medium">Step: ${step}</p>
-                <p class="text-green-600">Expected Result: ${result.test_case.format.then[index]}</p>
-              </div>
-            `;
-            stepsList.appendChild(li);
+            li.textContent = condition;
+            givenList.appendChild(li);
           });
 
-          // Add storage status if available
-          if (result.storage_status) {
-            const storageInfo = document.createElement('div');
-            storageInfo.innerHTML = `
-              <div class="mt-4 pt-4 border-t">
-                <h4 class="font-semibold">Storage Status:</h4>
-                <p>Memory Storage: ${result.storage_status.memory ? '✅' : '❌'}</p>
-                <p>Zephyr Scale: ${result.storage_status.zephyr ? '✅' : '❌'}</p>
-              </div>
-            `;
-            stepsList.parentElement.appendChild(storageInfo);
-          }
+          // Update When section
+          const whenList = document.getElementById('resultWhen');
+          whenList.innerHTML = '';
+          result.test_case.format.when.forEach(action => {
+            const li = document.createElement('li');
+            li.textContent = action;
+            whenList.appendChild(li);
+          });
+
+          // Update Then section
+          const thenList = document.getElementById('resultThen');
+          thenList.innerHTML = '';
+          result.test_case.format.then.forEach(result => {
+            const li = document.createElement('li');
+            li.textContent = result;
+            thenList.appendChild(li);
+          });
 
           // Scroll to results
           resultSection.scrollIntoView({ behavior: 'smooth' });
