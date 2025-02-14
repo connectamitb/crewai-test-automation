@@ -38,6 +38,9 @@
           </div>
           <a href="#" class="hover:text-yellow-300">Test Execution</a>
           <a href="#" class="hover:text-yellow-300">Reports</a>
+          <button id="healthCheckBtn" class="hover:text-yellow-300 flex items-center">
+            <span>Health Check</span>
+          </button>
           <a href="#" class="hover:text-yellow-300">Settings</a>
           <div id="authButtons">
             <a href="/login" id="loginBtn" class="hover:text-yellow-300">Login</a>
@@ -188,6 +191,19 @@ Acceptance Criteria:
       </div>
     </div>
   </section>
+
+  <!-- Add Health Check Modal -->
+  <div id="healthCheckModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
+    <div class="relative p-6 bg-white w-96 mx-auto mt-20 rounded-lg shadow-lg">
+      <h3 class="text-lg font-bold mb-4">System Health Status</h3>
+      <div id="healthCheckResults" class="space-y-4">
+        <!-- Results will be inserted here -->
+      </div>
+      <button id="closeHealthCheckModal" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+        Close
+      </button>
+    </div>
+  </div>
 
   <!-- JavaScript for Form Handling -->
   <script>
@@ -414,6 +430,62 @@ Acceptance Criteria:
       } else {
         loginBtn.classList.remove('hidden');
         logoutBtn.classList.add('hidden');      }
+    });
+
+    // Health Check Modal Handling
+    const healthCheckBtn = document.getElementById('healthCheckBtn');
+    const healthCheckModal = document.getElementById('healthCheckModal');
+    const closeHealthCheckModal = document.getElementById('closeHealthCheckModal');
+    const healthCheckResults = document.getElementById('healthCheckResults');
+
+    healthCheckBtn.addEventListener('click', async () => {
+      try {
+        healthCheckModal.classList.remove('hidden');
+        healthCheckResults.innerHTML = '<p class="text-gray-600">Checking system health...</p>';
+
+        const response = await fetch('/api/health');
+        const status = await response.json();
+
+        let resultsHtml = '';
+
+        // Add Weaviate status
+        const weaviateStatus = status.weaviate;
+        resultsHtml += `
+          <div class="p-4 rounded ${weaviateStatus.connected ? 'bg-green-100' : 'bg-red-100'}">
+            <h4 class="font-semibold">Weaviate Storage</h4>
+            <p class="mt-2">Status: ${weaviateStatus.connected ? '✅ Connected' : '❌ Disconnected'}</p>
+            ${weaviateStatus.error ? `<p class="text-red-600 mt-2">Error: ${weaviateStatus.error}</p>` : ''}
+          </div>
+        `;
+
+        // Add Server status
+        resultsHtml += `
+          <div class="p-4 rounded ${status.server ? 'bg-green-100' : 'bg-red-100'}">
+            <h4 class="font-semibold">Application Server</h4>
+            <p class="mt-2">Status: ${status.server ? '✅ Running' : '❌ Error'}</p>
+          </div>
+        `;
+
+        healthCheckResults.innerHTML = resultsHtml;
+
+      } catch (error) {
+        healthCheckResults.innerHTML = `
+          <div class="p-4 rounded bg-red-100">
+            <p class="text-red-600">Error checking system health: ${error.message}</p>
+          </div>
+        `;
+      }
+    });
+
+    closeHealthCheckModal.addEventListener('click', () => {
+      healthCheckModal.classList.add('hidden');
+    });
+
+    // Close modal when clicking outside
+    healthCheckModal.addEventListener('click', (e) => {
+      if (e.target === healthCheckModal) {
+        healthCheckModal.classList.add('hidden');
+      }
     });
   </script>
 
