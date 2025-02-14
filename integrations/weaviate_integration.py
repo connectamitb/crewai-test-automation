@@ -3,6 +3,8 @@ import os
 import logging
 from typing import Optional, Dict, List, Any
 import weaviate
+from weaviate.auth import AuthApiKey
+from weaviate.connect import ConnectionParams
 
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
@@ -26,18 +28,18 @@ class WeaviateIntegration:
             if not openai_api_key:
                 raise ValueError("OPENAI_API_KEY is not set")
 
-            self.logger.info(f"Attempting to connect to Weaviate at URL: {weaviate_url}")
+            self.logger.info(f"Attempting to connect to Weaviate at: {weaviate_url}")
 
-            # Initialize client
-            auth_config = weaviate.auth.AuthApiKey(api_key=weaviate_api_key)
-
-            self.client = weaviate.Client(
+            # Initialize client with v4 syntax and proper auth
+            auth = AuthApiKey(api_key=weaviate_api_key)
+            connection_params = ConnectionParams.from_params(
                 url=weaviate_url,
-                auth_client_secret=auth_config,
-                additional_headers={
+                auth_credentials=auth,
+                headers={
                     "X-OpenAI-Api-Key": openai_api_key
                 }
             )
+            self.client = weaviate.WeaviateClient(connection_params=connection_params)
 
             self.logger.info("✅ Successfully initialized Weaviate client")
 
@@ -110,7 +112,7 @@ class WeaviateIntegration:
                     ]
                 }
 
-                self.client.schema.create_class(class_obj)
+                self.client.schema.create(class_obj)
                 self.logger.info("✅ Created TestCase schema")
             else:
                 self.logger.info("✅ TestCase schema already exists")
@@ -123,25 +125,7 @@ class WeaviateIntegration:
         """Check if Weaviate is responding"""
         try:
             self.logger.debug("Checking Weaviate health status...")
-
-            # Check if client is ready
-            if not self.client.is_ready():
-                self.logger.error("❌ Weaviate client not ready")
-                return False
-
-            # Verify schema exists
-            schema = self.client.schema.get()
-            if not schema:
-                self.logger.error("❌ Could not retrieve schema")
-                return False
-
-            # Check if TestCase class exists
-            if not any(c.get("class") == "TestCase" for c in schema.get("classes", [])):
-                self.logger.error("❌ TestCase schema not found")
-                return False
-
-            self.logger.info("✅ Weaviate is healthy")
-            return True
+            return self.client.is_ready()
 
         except Exception as e:
             self.logger.error(f"❌ Health check failed: {str(e)}")
@@ -157,23 +141,18 @@ class WeaviateIntegration:
             test_case_data = test_case.to_weaviate_format()
             self.logger.debug(f"Storing test case: {test_case_data}")
 
-            try:
-                with self.client.batch as batch:
-                    batch.configure(batch_size=1)
-                    result = batch.add_data_object(
-                        data_object=test_case_data,
-                        class_name="TestCase"
-                    )
+            # Create data object using v4 syntax
+            result = self.client.objects.create(
+                class_name="TestCase",
+                properties=test_case_data
+            )
 
-                if result:
-                    self.logger.info(f"✅ Stored test case with ID: {result}")
-                    return result
-                else:
-                    raise Exception("No ID returned from storage operation")
-
-            except Exception as store_error:
-                self.logger.error(f"❌ Storage error: {str(store_error)}")
-                raise
+            if result:
+                case_id = result.uuid
+                self.logger.info(f"✅ Stored test case with ID: {case_id}")
+                return case_id
+            else:
+                raise Exception("No ID returned from storage operation")
 
         except Exception as e:
             self.logger.error(f"❌ Failed to store test case: {str(e)}")
@@ -185,16 +164,18 @@ class WeaviateIntegration:
             if not self.is_healthy():
                 raise Exception("Weaviate is not healthy")
 
-            result = (
-                self.client.query
-                .get("TestCase", ["name", "description", "steps", "expectedResults"])
+            # Use v4 query syntax
+            response = (
+                self.client.collections.get("TestCase")
+                .query
                 .with_near_text({"concepts": [query]})
                 .with_limit(limit)
+                .with_fields("name", "description", "steps", "expectedResults")
                 .do()
             )
 
-            if result and "data" in result and "Get" in result["data"]:
-                return result["data"]["Get"]["TestCase"]
+            if response and response.objects:
+                return [obj.properties for obj in response.objects]
             return []
 
         except Exception as e:
@@ -207,9 +188,11 @@ class WeaviateIntegration:
             if not self.is_healthy():
                 raise Exception("Weaviate is not healthy")
 
-            result = (
-                self.client.query
-                .get("TestCase", ["name", "description", "steps", "expectedResults"])
+            # Use v4 query syntax
+            response = (
+                self.client.collections.get("TestCase")
+                .query
+                .with_fields("name", "description", "steps", "expectedResults")
                 .with_where({
                     "path": ["name"],
                     "operator": "Equal",
@@ -218,10 +201,8 @@ class WeaviateIntegration:
                 .do()
             )
 
-            if result and "data" in result and "Get" in result["data"]:
-                cases = result["data"]["Get"]["TestCase"]
-                if cases:
-                    return cases[0]
+            if response and response.objects:
+                return response.objects[0].properties
             return None
 
         except Exception as e:
