@@ -121,9 +121,27 @@ class WeaviateIntegration:
     def is_healthy(self) -> bool:
         """Check if Weaviate is responding"""
         try:
+            self.logger.debug("Checking Weaviate health status...")
             is_ready = self.client.is_ready()
-            self.logger.debug(f"Weaviate health check: {'✅ Ready' if is_ready else '❌ Not ready'}")
+            self.logger.info(f"Weaviate health check: {'✅ Ready' if is_ready else '❌ Not ready'}")
+
+            # Additional connection verification
+            if is_ready:
+                try:
+                    # Verify schema exists
+                    schema = self.client.schema.get()
+                    self.logger.debug(f"Retrieved schema: {schema}")
+                    if schema and any(c["class"] == "TestCase" for c in schema.get("classes", [])):
+                        self.logger.info("✅ TestCase schema exists and is accessible")
+                        return True
+                    else:
+                        self.logger.error("❌ TestCase schema not found")
+                        return False
+                except Exception as e:
+                    self.logger.error(f"❌ Schema verification failed: {str(e)}")
+                    return False
             return is_ready
+
         except Exception as e:
             self.logger.error(f"❌ Health check failed: {str(e)}")
             return False
@@ -134,6 +152,11 @@ class WeaviateIntegration:
             # Convert to Weaviate format
             test_case_data = test_case.to_weaviate_format()
             self.logger.debug(f"Attempting to store test case: {test_case_data}")
+
+            # Verify health before storing
+            if not self.is_healthy():
+                self.logger.error("❌ Weaviate is not healthy, cannot store test case")
+                return None
 
             # Store in Weaviate
             try:
