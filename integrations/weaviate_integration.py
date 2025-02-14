@@ -3,7 +3,7 @@ import os
 import logging
 import weaviate
 from typing import Optional, Dict, List, Any
-import uuid
+from weaviate.classes.init import Auth
 
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
@@ -19,78 +19,69 @@ class WeaviateIntegration:
         if not weaviate_url or not weaviate_api_key:
             raise ValueError("Missing required Weaviate credentials")
 
-        # Initialize client
-        self.client = weaviate.Client(
-            url=weaviate_url,
-            auth_client_secret=weaviate.AuthApiKey(api_key=weaviate_api_key)
-        )
+        # Initialize client with cloud connection
+        try:
+            self.client = weaviate.connect_to_weaviate_cloud(
+                cluster_url=weaviate_url,
+                auth_credentials=Auth.api_key(weaviate_api_key),
+            )
+            self.logger.info("Connected to Weaviate Cloud")
 
-        # Create schema if it doesn't exist
-        self._create_schema()
+            # Create schema if it doesn't exist
+            self._create_schema()
+
+        except Exception as e:
+            self.logger.error(f"Failed to connect to Weaviate: {str(e)}")
+            raise
 
     def _create_schema(self):
         """Create a simple test case schema in Weaviate"""
         schema = {
             "class": "TestCase",
-            "vectorizer": "text2vec-contextionary",
+            "description": "A test case for software testing",
+            "vectorizer": "text2vec-openai",
             "moduleConfig": {
-                "text2vec-contextionary": {
-                    "vectorizeClassName": True
+                "text2vec-openai": {
+                    "model": "ada",
+                    "modelVersion": "002",
+                    "type": "text"
                 }
             },
             "properties": [
                 {
                     "name": "name",
                     "dataType": ["string"],
-                    "description": "The name of the test case",
-                    "moduleConfig": {
-                        "text2vec-contextionary": {
-                            "vectorize": True,
-                            "skip": False
-                        }
-                    }
+                    "description": "The name of the test case"
                 },
                 {
                     "name": "description",
                     "dataType": ["text"],
-                    "description": "The description of the test case",
-                    "moduleConfig": {
-                        "text2vec-contextionary": {
-                            "vectorize": True,
-                            "skip": False
-                        }
-                    }
+                    "description": "The description of the test case"
                 },
                 {
                     "name": "steps",
                     "dataType": ["text[]"],
-                    "description": "Test execution steps",
-                    "moduleConfig": {
-                        "text2vec-contextionary": {
-                            "vectorize": True,
-                            "skip": False
-                        }
-                    }
+                    "description": "Test execution steps"
                 },
                 {
                     "name": "expectedResults",
                     "dataType": ["text[]"],
-                    "description": "Expected results for each step",
-                    "moduleConfig": {
-                        "text2vec-contextionary": {
-                            "vectorize": True,
-                            "skip": False
-                        }
-                    }
+                    "description": "Expected results for each step"
                 }
             ]
         }
 
         try:
-            # Create schema if it doesn't exist
-            if not any(c["class"] == "TestCase" for c in self.client.schema.get().get("classes", [])):
+            # Check if schema exists
+            current_schema = self.client.schema.get()
+            existing_classes = [c["class"] for c in current_schema.get("classes", [])]
+
+            if "TestCase" not in existing_classes:
                 self.client.schema.create_class(schema)
                 self.logger.info("Created TestCase schema in Weaviate")
+            else:
+                self.logger.info("TestCase schema already exists")
+
         except Exception as e:
             self.logger.error(f"Error creating schema: {str(e)}")
             raise
@@ -106,21 +97,23 @@ class WeaviateIntegration:
     def store_test_case(self, test_case) -> Optional[str]:
         """Store a test case in Weaviate"""
         try:
-            # Generate UUID for the test case
-            test_case_id = str(uuid.uuid4())
-
             # Convert to Weaviate format
             test_case_data = test_case.to_weaviate_format()
             self.logger.debug(f"Storing test case: {test_case_data}")
 
             # Store in Weaviate
-            self.client.data_object.create(
-                data_object=test_case_data,
-                class_name="TestCase",
-                uuid=test_case_id
-            )
+            try:
+                uuid = self.client.data_object.create(
+                    data_object=test_case_data,
+                    class_name="TestCase"
+                )
+                self.logger.info(f"Successfully stored test case with ID: {uuid}")
+                return uuid
 
-            return test_case_id
+            except Exception as e:
+                self.logger.error(f"Error storing test case: {str(e)}")
+                return None
+
         except Exception as e:
             self.logger.error(f"Failed to store test case: {str(e)}")
             return None
@@ -130,14 +123,11 @@ class WeaviateIntegration:
         try:
             self.logger.debug(f"Searching for test cases with query: {query}")
 
+            # Perform semantic search using v4 API
             result = (
                 self.client.query
                 .get("TestCase", ["name", "description", "steps", "expectedResults"])
-                .with_near_text({
-                    "concepts": [query],
-                    "certainty": 0.7
-                })
-                .with_additional(["certainty"])
+                .with_near_text({"concepts": [query]})
                 .with_limit(limit)
                 .do()
             )

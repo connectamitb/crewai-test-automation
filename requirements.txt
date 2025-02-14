@@ -24,3 +24,4 @@ flask-login
 flask-wtf
 flask-login
 oauthlib
+weaviate-client>=4.0.0
