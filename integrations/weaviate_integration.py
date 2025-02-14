@@ -11,6 +11,7 @@ class WeaviateIntegration:
     def __init__(self):
         """Initialize Weaviate client with configuration"""
         self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
 
         # Get credentials from environment
         weaviate_url = os.getenv("WEAVIATE_URL")
@@ -21,17 +22,18 @@ class WeaviateIntegration:
 
         # Initialize client with cloud connection
         try:
+            self.logger.debug("Attempting to connect to Weaviate Cloud...")
             self.client = weaviate.connect_to_weaviate_cloud(
                 cluster_url=weaviate_url,
                 auth_credentials=Auth.api_key(weaviate_api_key),
             )
-            self.logger.info("Connected to Weaviate Cloud")
+            self.logger.info("✅ Successfully connected to Weaviate Cloud")
 
             # Create schema if it doesn't exist
             self._create_schema()
 
         except Exception as e:
-            self.logger.error(f"Failed to connect to Weaviate: {str(e)}")
+            self.logger.error(f"❌ Failed to connect to Weaviate: {str(e)}")
             raise
 
     def _create_schema(self):
@@ -73,25 +75,29 @@ class WeaviateIntegration:
 
         try:
             # Check if schema exists
+            self.logger.debug("Checking existing schema...")
             current_schema = self.client.schema.get()
             existing_classes = [c["class"] for c in current_schema.get("classes", [])]
 
             if "TestCase" not in existing_classes:
+                self.logger.info("Creating TestCase schema...")
                 self.client.schema.create_class(schema)
-                self.logger.info("Created TestCase schema in Weaviate")
+                self.logger.info("✅ Created TestCase schema in Weaviate")
             else:
-                self.logger.info("TestCase schema already exists")
+                self.logger.info("✅ TestCase schema already exists")
 
         except Exception as e:
-            self.logger.error(f"Error creating schema: {str(e)}")
+            self.logger.error(f"❌ Error creating schema: {str(e)}")
             raise
 
     def is_healthy(self) -> bool:
         """Check if Weaviate is responding"""
         try:
-            return self.client.is_ready()
+            is_ready = self.client.is_ready()
+            self.logger.debug(f"Weaviate health check: {'✅ Ready' if is_ready else '❌ Not ready'}")
+            return is_ready
         except Exception as e:
-            self.logger.error(f"Health check failed: {str(e)}")
+            self.logger.error(f"❌ Health check failed: {str(e)}")
             return False
 
     def store_test_case(self, test_case) -> Optional[str]:
@@ -99,23 +105,39 @@ class WeaviateIntegration:
         try:
             # Convert to Weaviate format
             test_case_data = test_case.to_weaviate_format()
-            self.logger.debug(f"Storing test case: {test_case_data}")
+            self.logger.debug(f"Attempting to store test case: {test_case_data}")
 
             # Store in Weaviate
             try:
-                uuid = self.client.data_object.create(
-                    data_object=test_case_data,
-                    class_name="TestCase"
+                # Create properties object as expected by Weaviate v4
+                properties = {
+                    "name": test_case_data["name"],
+                    "description": test_case_data["description"],
+                    "steps": test_case_data["steps"],
+                    "expectedResults": test_case_data["expectedResults"]
+                }
+
+                self.logger.debug(f"Creating data object with properties: {properties}")
+
+                # Create the object using the data object API
+                result = self.client.data_object.create(
+                    class_name="TestCase",
+                    properties=properties
                 )
-                self.logger.info(f"Successfully stored test case with ID: {uuid}")
-                return uuid
+
+                if result:
+                    self.logger.info(f"✅ Successfully stored test case with ID: {result}")
+                    return result
+                else:
+                    self.logger.error("❌ No result returned from create operation")
+                    return None
 
             except Exception as e:
-                self.logger.error(f"Error storing test case: {str(e)}")
+                self.logger.error(f"❌ Error storing test case: {str(e)}")
                 return None
 
         except Exception as e:
-            self.logger.error(f"Failed to store test case: {str(e)}")
+            self.logger.error(f"❌ Failed to store test case: {str(e)}")
             return None
 
     def search_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
@@ -140,7 +162,7 @@ class WeaviateIntegration:
             return []
 
         except Exception as e:
-            self.logger.error(f"Search error: {str(e)}")
+            self.logger.error(f"❌ Search error: {str(e)}")
             return []
 
     def get_test_case(self, name: str) -> Optional[Dict[str, Any]]:
@@ -164,5 +186,5 @@ class WeaviateIntegration:
             return None
 
         except Exception as e:
-            self.logger.error(f"Error retrieving test case: {str(e)}")
+            self.logger.error(f"❌ Error retrieving test case: {str(e)}")
             return None
