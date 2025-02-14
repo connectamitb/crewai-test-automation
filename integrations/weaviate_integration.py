@@ -6,6 +6,7 @@ from typing import Optional, Dict, List, Any
 import uuid
 from integrations.models import TestCase
 import time
+import traceback
 
 class WeaviateIntegration:
     """Handles interaction with Weaviate vector database"""
@@ -20,30 +21,26 @@ class WeaviateIntegration:
             weaviate_url = os.getenv("WEAVIATE_URL")
             weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
 
-            if not weaviate_url:
-                self.logger.error("❌ WEAVIATE_URL is not set")
-                raise ValueError("WEAVIATE_URL environment variable is required")
-
-            if not weaviate_api_key:
-                self.logger.error("❌ WEAVIATE_API_KEY is not set")
-                raise ValueError("WEAVIATE_API_KEY environment variable is required")
-
-            self.logger.info(f"Attempting to connect to Weaviate at: {weaviate_url}")
+            self.logger.info("Initializing Weaviate with URL: %s", weaviate_url)
+            if not weaviate_url or not weaviate_api_key:
+                raise ValueError("Missing required Weaviate credentials")
 
             # Initialize client with retry logic
             retry_count = 0
             max_retries = 3
             while retry_count < max_retries:
                 try:
+                    self.logger.debug("Attempting to connect to Weaviate (attempt %d/%d)", retry_count + 1, max_retries)
                     self.client = weaviate.Client(
                         url=weaviate_url,
                         auth_client_secret=weaviate.AuthApiKey(api_key=weaviate_api_key),
-                        timeout_config=(10, 60)  # Increased timeouts (connect timeout, read timeout)
+                        timeout_config=(10, 60)
                     )
 
-                    # Test connection
+                    # Verify connection is working
                     if self.is_healthy():
                         self.logger.info("✅ Successfully connected to Weaviate")
+                        # Create schema if it doesn't exist
                         self._create_schema()
                         break
                     else:
@@ -51,45 +48,22 @@ class WeaviateIntegration:
 
                 except Exception as e:
                     retry_count += 1
-                    self.logger.error(f"Connection attempt {retry_count} failed: {str(e)}")
+                    self.logger.error("Connection attempt %d failed: %s\n%s", 
+                                    retry_count, str(e), traceback.format_exc())
                     if retry_count == max_retries:
-                        self.logger.error(f"❌ Failed to connect after {max_retries} attempts: {str(e)}")
                         raise
-                    self.logger.warning(f"Retrying in 2 seconds... ({retry_count}/{max_retries})")
-                    time.sleep(2)  # Wait before retry
+                    time.sleep(2)
 
         except Exception as e:
-            self.logger.error(f"❌ Failed to initialize Weaviate client: {str(e)}")
+            self.logger.error("❌ Failed to initialize Weaviate: %s\n%s", 
+                            str(e), traceback.format_exc())
             self.client = None
             raise
-
-    def is_healthy(self) -> bool:
-        """Check if Weaviate is responding"""
-        try:
-            if not self.client:
-                self.logger.error("No Weaviate client available")
-                return False
-
-            # Test live() and ready() endpoints with detailed logging
-            is_live = self.client.is_live()
-            is_ready = self.client.is_ready()
-
-            self.logger.info(f"Weaviate health check - Live: {is_live}, Ready: {is_ready}")
-
-            if not is_live:
-                self.logger.error("Weaviate is not live")
-            if not is_ready:
-                self.logger.error("Weaviate is not ready")
-
-            return is_live and is_ready
-
-        except Exception as e:
-            self.logger.error(f"Health check failed with error: {str(e)}")
-            return False
 
     def _create_schema(self):
         """Create the test case schema in Weaviate"""
         try:
+            self.logger.info("Checking if schema exists...")
             current_schema = self.client.schema.get()
             if any(c["class"] == "TestCase" for c in current_schema.get("classes", [])):
                 self.logger.info("Schema already exists")
@@ -97,7 +71,7 @@ class WeaviateIntegration:
 
             schema = {
                 "class": "TestCase",
-                "vectorizer": "text2vec-contextionary",  # Changed to default vectorizer
+                "vectorizer": "text2vec-contextionary",
                 "properties": [
                     {
                         "name": "name",
@@ -136,8 +110,33 @@ class WeaviateIntegration:
             self.logger.info("✅ Schema created successfully")
 
         except Exception as e:
-            self.logger.error(f"Schema creation failed: {str(e)}")
+            self.logger.error("Schema creation failed: %s\n%s", 
+                            str(e), traceback.format_exc())
             raise
+
+    def is_healthy(self) -> bool:
+        """Check if Weaviate is responding"""
+        try:
+            if not self.client:
+                self.logger.error("No Weaviate client available")
+                return False
+
+            is_live = self.client.is_live()
+            is_ready = self.client.is_ready()
+
+            self.logger.info("Weaviate health check - Live: %s, Ready: %s", is_live, is_ready)
+
+            if not is_live:
+                self.logger.error("Weaviate is not live")
+            if not is_ready:
+                self.logger.error("Weaviate is not ready")
+
+            return is_live and is_ready
+
+        except Exception as e:
+            self.logger.error("Health check failed: %s\n%s", 
+                            str(e), traceback.format_exc())
+            return False
 
     def store_test_case(self, test_case: TestCase) -> Optional[str]:
         """Store a test case in Weaviate"""

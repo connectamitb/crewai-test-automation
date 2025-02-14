@@ -38,6 +38,7 @@ def init_weaviate():
     if weaviate_client is None:
         try:
             from integrations.weaviate_integration import WeaviateIntegration
+            logger.info("Attempting to initialize Weaviate client...")
             weaviate_client = WeaviateIntegration()
 
             if weaviate_client and weaviate_client.is_healthy():
@@ -45,11 +46,11 @@ def init_weaviate():
                 app.config['weaviate_client'] = weaviate_client
                 return weaviate_client
             else:
-                logger.warning("⚠️ Weaviate client not healthy, running in degraded mode")
+                logger.error("⚠️ Weaviate client not healthy")
                 return None
 
         except Exception as e:
-            logger.error(f"❌ Error initializing Weaviate client: {str(e)}")
+            logger.error("❌ Error initializing Weaviate client: %s", str(e))
             logger.error(traceback.format_exc())
             return None
 
@@ -86,18 +87,38 @@ def health_check():
     """Check system health"""
     try:
         client = init_weaviate()
+        weaviate_status = False
+        weaviate_error = None
+
+        if client:
+            try:
+                weaviate_status = client.is_healthy()
+                if not weaviate_status:
+                    weaviate_error = "Weaviate is not healthy"
+            except Exception as e:
+                weaviate_error = str(e)
+        else:
+            weaviate_error = "Weaviate client initialization failed"
+
         status = {
-            'weaviate': client.is_healthy() if client else False,
+            'weaviate': {
+                'connected': weaviate_status,
+                'error': weaviate_error
+            },
             'server': True
         }
-        logger.info(f"Health check status: {status}")
+
+        logger.info("Health check status: %s", status)
         return jsonify(status)
     except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
+        logger.error("Health check failed: %s", str(e))
+        logger.error(traceback.format_exc())
         return jsonify({
-            'weaviate': False,
-            'server': True,
-            'error': str(e)
+            'weaviate': {
+                'connected': False,
+                'error': str(e)
+            },
+            'server': True
         })
 
 @app.errorhandler(404)
