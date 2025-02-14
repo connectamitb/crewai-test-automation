@@ -142,23 +142,40 @@ class WeaviateIntegration:
         """Store a test case in Weaviate"""
         if not self.is_healthy():
             self.logger.error("❌ Weaviate client not healthy")
-            return None
+            raise ValueError("Weaviate client not healthy")
 
         try:
-            # Convert test case to Weaviate format
+            # Convert test case to Weaviate format and log it
             weaviate_data = test_case.to_weaviate_format()
-            self.logger.debug("Storing test case data: %s", weaviate_data)
+            self.logger.debug("Attempting to store test case data: %s", weaviate_data)
 
             # Generate UUID for the test case
             test_case_id = str(uuid.uuid4())
+            self.logger.info("Generated UUID for test case: %s", test_case_id)
+
+            # Verify schema exists before storing
+            try:
+                current_schema = self.client.schema.get()
+                if not any(c["class"] == "TestCase" for c in current_schema.get("classes", [])):
+                    self.logger.warning("TestCase schema not found, creating it now...")
+                    self._create_schema()
+            except Exception as schema_error:
+                self.logger.error("Failed to verify schema: %s\n%s", 
+                                str(schema_error), traceback.format_exc())
+                raise
 
             # Store in Weaviate
             self.logger.info("Attempting to store test case with ID: %s", test_case_id)
-            self.client.data_object.create(
-                data_object=weaviate_data,
-                class_name="TestCase",
-                uuid=test_case_id
-            )
+            try:
+                self.client.data_object.create(
+                    data_object=weaviate_data,
+                    class_name="TestCase",
+                    uuid=test_case_id
+                )
+            except Exception as create_error:
+                self.logger.error("Failed to create data object: %s\n%s", 
+                                str(create_error), traceback.format_exc())
+                raise
 
             self.logger.info("✅ Successfully stored test case: %s with ID: %s", test_case.name, test_case_id)
 
@@ -166,15 +183,14 @@ class WeaviateIntegration:
             verification = self.get_test_case(test_case.name)
             if verification:
                 self.logger.info("✅ Verified test case storage - retrieval successful")
+                return test_case_id
             else:
                 self.logger.error("❌ Failed to verify test case storage - could not retrieve stored case")
-                return None
-
-            return test_case_id
+                raise ValueError("Failed to verify test case storage")
 
         except Exception as e:
             self.logger.error("❌ Failed to store test case: %s\n%s", str(e), traceback.format_exc())
-            return None
+            raise ValueError(f"Failed to store test case: {str(e)}")
 
     def search_test_cases(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Search for test cases using vector similarity"""
@@ -216,6 +232,7 @@ class WeaviateIntegration:
             return None
 
         try:
+            self.logger.debug("Attempting to retrieve test case with name: %s", name)
             result = (
                 self.client.query
                 .get("TestCase", [
@@ -234,15 +251,17 @@ class WeaviateIntegration:
                 .do()
             )
 
+            self.logger.debug("Query result: %s", result)
+
             if result and "data" in result and "Get" in result["data"]:
                 cases = result["data"]["Get"]["TestCase"]
                 if cases:
-                    self.logger.info(f"Found test case: {name}")
+                    self.logger.info("Found test case: %s", name)
                     return cases[0]
 
-            self.logger.warning(f"No test case found with name: {name}")
+            self.logger.warning("No test case found with name: %s", name)
             return None
 
         except Exception as e:
-            self.logger.error(f"Error retrieving test case: {str(e)}")
+            self.logger.error("Error retrieving test case: %s\n%s", str(e), traceback.format_exc())
             return None

@@ -26,13 +26,9 @@ def create_test_case():
             return jsonify({'error': 'Missing requirement field'}), 400
 
         requirement_text = data['requirement']
-        logger.debug(f"Creating test case with requirement: {requirement_text[:50]}...")
+        logger.debug("Creating test case with requirement: %s", requirement_text[:50])
 
-        # Parse the requirement text to extract relevant sections
-        lines = requirement_text.split('\n')
-        title = lines[0].strip()
-
-        # Create test format structure based on the login requirements
+        # Create test format structure
         test_format = TestFormat(
             given=[
                 "Valid user account exists in the system",
@@ -55,8 +51,8 @@ def create_test_case():
 
         # Create test case with proper structure
         test_case = TestCase(
-            name=title,
-            objective=requirement_text[:200],  # First 200 chars as objective
+            name=data.get('project_key', 'Login Feature Test'),
+            objective=requirement_text[:200],
             precondition="Valid user account exists and system is accessible",
             steps=[
                 "Navigate to login page",
@@ -67,7 +63,7 @@ def create_test_case():
             ],
             requirement=requirement_text,
             gherkin="""Feature: User Login Authentication
-            
+
               Scenario: Successful login with valid credentials
                 Given valid user account exists in the system
                 And user has correct email and password
@@ -84,35 +80,43 @@ def create_test_case():
         try:
             logger.debug("Creating test case with data: %s", data)
             weaviate_client = current_app.config.get('weaviate_client')
-            if not weaviate_client or not weaviate_client.is_healthy():
-                logger.error("Weaviate client unavailable or unhealthy")
+
+            if not weaviate_client:
+                logger.error("Weaviate client not initialized")
                 return jsonify({
                     'status': 'error',
-                    'message': 'Vector storage service unavailable',
+                    'message': 'Vector storage service not initialized',
                 }), 503
 
-            case_id = weaviate_client.store_test_case(test_case)
-            if not case_id:
-                logger.error("Failed to store test case in Weaviate")
+            if not weaviate_client.is_healthy():
+                logger.error("Weaviate client not healthy")
                 return jsonify({
                     'status': 'error',
-                    'message': 'Failed to store test case',
+                    'message': 'Vector storage service unhealthy',
+                }), 503
+
+            try:
+                case_id = weaviate_client.store_test_case(test_case)
+                logger.info("Successfully created and stored test case with ID: %s", case_id)
+                return jsonify({
+                    'status': 'success',
+                    'message': 'Test case created and stored successfully',
+                    'test_case': test_case.model_dump(),
+                    'id': case_id
+                }), 201
+            except ValueError as ve:
+                logger.error("Failed to store test case: %s", str(ve))
+                return jsonify({
+                    'status': 'error',
+                    'message': str(ve)
                 }), 500
 
-            logger.info("Successfully created and stored test case with ID: %s", case_id)
-            return jsonify({
-                'status': 'success',
-                'message': 'Test case created and stored successfully',
-                'test_case': test_case.model_dump(),
-                'id': case_id
-            }), 201
-
         except Exception as e:
-            logger.error("Error creating test case: %s", str(e), exc_info=True)
+            logger.error("Error during test case storage: %s", str(e), exc_info=True)
             return jsonify({'error': str(e)}), 500
 
     except Exception as e:
-        logger.error(f"Error creating test case: {str(e)}", exc_info=True)
+        logger.error("Error creating test case: %s", str(e), exc_info=True)
         return jsonify({'error': str(e)}), 500
 
 @test_cases_bp.route('/api/v1/test-cases/search', methods=['GET'])
