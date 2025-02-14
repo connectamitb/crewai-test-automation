@@ -1,5 +1,6 @@
 """Routes for test case management"""
 import logging
+import os
 from flask import Blueprint, request, jsonify, current_app
 from integrations.models import TestCase
 
@@ -14,8 +15,17 @@ test_cases_bp = Blueprint('test_cases', __name__)
 def create_test_case():
     """Create and store a test case"""
     try:
+        # Log environment variables (without values)
+        logger.debug("Checking environment variables...")
+        env_vars = ['WEAVIATE_URL', 'WEAVIATE_API_KEY', 'OPENAI_API_KEY']
+        for var in env_vars:
+            logger.debug(f"{var} is {'set' if os.getenv(var) else 'not set'}")
+
         data = request.get_json()
+        logger.debug("Received request data: %s", data)
+
         if not data or 'requirement' not in data:
+            logger.error("Missing requirement field in request data")
             return jsonify({'error': 'Missing requirement field'}), 400
 
         logger.debug("Processing requirement: %s", data['requirement'])
@@ -23,6 +33,7 @@ def create_test_case():
         # Parse the input text
         lines = data['requirement'].split('\n')
         name = next((line for line in lines if line.strip()), "Test Case")
+        logger.debug("Extracted test case name: %s", name)
 
         # Extract steps and expected results from the requirement text
         steps = []
@@ -36,34 +47,52 @@ def create_test_case():
 
         # If no explicit steps/results found, create basic login steps
         if not steps:
+            logger.debug("No explicit steps found, using default steps")
             steps = ["Navigate to login page", "Enter credentials", "Click login button"]
         if not expected_results:
+            logger.debug("No explicit expected results found, using default results")
             expected_results = ["Login page displayed", "Credentials accepted", "User logged in"]
 
-        # Create a simple test case
+        logger.debug("Steps: %s", steps)
+        logger.debug("Expected Results: %s", expected_results)
+
+        # Create a test case
         test_case = TestCase(
             name=name,
             description=data['requirement'],
             steps=steps,
             expected_results=expected_results
         )
+        logger.debug("Created TestCase object: %s", test_case)
 
         # Get Weaviate client
         weaviate_client = current_app.config.get('weaviate_client')
         if not weaviate_client:
+            logger.error("Weaviate client not found in app config")
             return jsonify({
                 'status': 'error',
                 'message': 'Storage service not initialized'
             }), 503
 
+        # Check Weaviate health
+        if not weaviate_client.is_healthy():
+            logger.error("Weaviate client is not healthy")
+            return jsonify({
+                'status': 'error',
+                'message': 'Storage service is not healthy'
+            }), 503
+
         # Store the test case
+        logger.debug("Attempting to store test case in Weaviate")
         case_id = weaviate_client.store_test_case(test_case)
+
         if case_id:
             logger.info("Successfully stored test case with ID: %s", case_id)
             return jsonify({
                 'status': 'success',
                 'message': 'Test case created successfully',
                 'test_case': {
+                    'id': case_id,
                     'name': test_case.name,
                     'description': test_case.description,
                     'steps': test_case.steps,
@@ -71,7 +100,7 @@ def create_test_case():
                 }
             }), 201
         else:
-            logger.error("Failed to store test case")
+            logger.error("Failed to store test case - no ID returned")
             return jsonify({
                 'status': 'error',
                 'message': 'Failed to store test case'
