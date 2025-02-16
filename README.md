@@ -1,40 +1,59 @@
-# CrewAI Test Automation Dashboard
+FLASK_SECRET_KEY=your_secret_key
+WEAVIATE_URL=your_weaviate_url
+WEAVIATE_API_KEY=your_weaviate_api_key
+OPENAI_API_KEY=your_openai_api_key
+```
 
-A web application that provides advanced code analysis and test automation capabilities using CrewAI and various testing agents.
+## Installation
 
-## Key Features
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/crewai-test-automation.git
+cd crewai-test-automation
+```
 
-1. **Authentication**
-   - Google Sign-in integration using Firebase
-   - Secure session management
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-2. **Test Agents Dashboard**
-   - Manual Test Agent: Create and manage manual test cases
-   - Automation Test Agent: Convert manual tests to Selenium scripts
-   - Performance Test Agent: JMeter performance testing
-   - Auto-Debugging Agent: Analyze failure logs
-   - Self-Healing Locators: Auto-correct broken XPath
-   - GenAI Test Case Agent: AI-powered test generation
-   - Exploratory Testing Agent: UI change detection
-   - Report Compilation Agent: Test analytics
+3. Run the application:
+```bash
+python main.py
+```
 
-3. **Code Analysis**
-   - Integration with Cursor AI via SSH
-   - Real-time code analysis capabilities
-   - Debugging and optimization suggestions
+The application will be available at `http://localhost:5000`
 
-## Routes
+## API Documentation
 
-- `/`: Main dashboard page
-- `/login`: Authentication page
-- `/auth`: Authentication endpoint for Firebase
-- `/analyze-code`: Code analysis endpoint using Cursor AI
-- `/submit_requirement`: Endpoint for submitting test requirements
+### Test Cases
 
-## Architecture
+#### Create Test Case
+`POST /api/v1/test-cases`
+```json
+{
+  "requirement": "Test requirement text",
+  "project_key": "TEST-123"
+}
+```
 
-The application follows a client-server architecture:
-1. Flask backend handling requests and business logic
-2. Firebase for authentication
-3. Cursor AI integration for code analysis
-4. Bootstrap/Tailwind CSS for responsive UI
+#### Search Test Cases
+`GET /api/v1/test-cases/search?q=search_query`
+
+#### Get Test Case
+`GET /api/v1/test-cases/<case_id>`
+
+## Project Structure
+```
+├── agents/              # AI agents for test operations
+│   ├── nlp_parsing.py  # NLP processing agent
+│   └── requirement_input.py  # Input processing agent
+├── integrations/        # External service integrations
+│   ├── models.py       # Data models
+│   └── weaviate_integration.py  # Vector DB integration
+├── routes/             # API route handlers
+│   ├── health.py      # Health check endpoints
+│   └── test_cases.py  # Test case management endpoints
+├── static/             # Static assets
+├── templates/          # HTML templates
+└── tests/              # Unit and integration tests
