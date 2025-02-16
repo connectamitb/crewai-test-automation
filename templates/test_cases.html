@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Case Manager</title>
+    <style>
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .search-results { margin-top: 20px; }
+        .test-case { 
+            border: 1px solid #ddd; 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px;
+        }
+        .score { color: #666; font-size: 0.9em; }
+        .steps { margin: 10px 0; padding-left: 20px; }
+        textarea { width: 100%; height: 150px; margin: 10px 0; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test Case Manager</h1>
+        
+        <!-- Create Test Case Section -->
+        <div>
+            <h2>Create Test Case</h2>
+            <textarea id="requirement" placeholder="Enter your requirement here..."></textarea>
+            <button onclick="createTestCase()">Generate Test Case</button>
+            <div id="createResult"></div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="search-container">
+            <h2>Search Test Cases</h2>
+            <input type="text" id="searchQuery" placeholder="Search test cases...">
+            <button onclick="searchTestCases()">Search</button>
+            <div id="searchResults" class="search-results"></div>
+        </div>
+    </div>
+
+    <script>
+        async function createTestCase() {
+            const requirement = document.getElementById('requirement').value;
+            const resultDiv = document.getElementById('createResult');
+            
+            try {
+                const response = await fetch('/api/v1/test-cases', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ requirement })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="success">
+                            <h3>Test Case Created Successfully</h3>
+                            <p>Name: ${data.test_case.name}</p>
+                            <p>Description: ${data.test_case.description}</p>
+                            <div class="steps">
+                                <h4>Steps:</h4>
+                                <ul>
+                                    ${data.test_case.steps.map(step => `<li>${step}</li>`).join('')}
+                                </ul>
+                                <h4>Expected Results:</h4>
+                                <ul>
+                                    ${data.test_case.expected_results.map(result => `<li>${result}</li>`).join('')}
+                                </ul>
+                            </div>
+                            <p>Priority: ${data.test_case.priority}</p>
+                            <p>Automation Status: ${data.test_case.automation_status}</p>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function searchTestCases() {
+            const query = document.getElementById('searchQuery').value;
+            const resultsDiv = document.getElementById('searchResults');
+            
+            try {
+                const response = await fetch(`/api/v1/test-cases/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    if (data.results.length === 0) {
+                        resultsDiv.innerHTML = '<p>No results found</p>';
+                        return;
+                    }
+                    
+                    resultsDiv.innerHTML = data.results.map(testCase => `
+                        <div class="test-case">
+                            <h3>${testCase.name}</h3>
+                            <p class="score">Relevance Score: ${(testCase.relevance_score * 100).toFixed(1)}%</p>
+                            <p>${testCase.description}</p>
+                            <div class="steps">
+                                <h4>Steps:</h4>
+                                <ul>
+                                    ${testCase.steps.map(step => `<li>${step}</li>`).join('')}
+                                </ul>
+                                <h4>Expected Results:</h4>
+                                <ul>
+                                    ${testCase.expected_results.map(result => `<li>${result}</li>`).join('')}
+                                </ul>
+                            </div>
+                            <p>Priority: ${testCase.priority}</p>
+                            <p>Tags: ${testCase.tags.join(', ')}</p>
+                        </div>
+                    `).join('');
+                } else {
+                    resultsDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+                }
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        // Add search on Enter key
+        document.getElementById('searchQuery').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchTestCases();
+            }
+        });
+    </script>
+</body>
+</html> 

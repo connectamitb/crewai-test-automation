@@ -1,0 +1,186 @@
+"""
+================================================================
+Project: Ultimate CrewAI Multi-Agent System Implementation
+================================================================
+
+Objective:
+Develop a complete, production-ready, self-updating CrewAI multi-agent system that processes test requirements, generates and maps test cases, and supports querying of stored test cases. Every step is explicit and unambiguous.
+
+Requirements:
+--------------
+1. Role-Based Agent Design:
+   - Implement the following agent classes, each with a unique ID, role, goal, backstory, and settings (validated via pydantic):
+       • DataCollectorAgent
+       • AnalyzerAgent
+       • StrategistAgent
+       • ManagerAgent
+       • ReporterAgent
+       • RequirementInputAgent       # Receives and cleans raw test requirements and wireframes.
+       • NLPParsingAgent             # Uses an LLM to extract structured details from cleaned requirements.
+       • TestCaseMappingAgent        # Generates a formatted test case (e.g., in Gherkin or Zephyr Scale format).
+       • ValidationAgent             # Validates that test cases contain required elements.
+       • ChangeDetectionAgent        # Monitors stored wireframes/requirements for modifications.
+       • TestCaseUpdateAgent         # Triggers re-generation of test cases when updates are detected.
+       • StorageIntegrationAgent     # Stores final test cases in Zephyr Scale and in a vector database.
+       • QueryInterfaceAgent         # Provides a conversational query interface for test cases.
+       • FlowOrchestratorAgent       # Coordinates the entire workflow from input to storage.
+       • LoggingAgent                # Logs every step of the process.
+
+2. Autonomous Inter-Agent Delegation:
+   - All agents must implement the methods:
+       • execute_task(task)
+       • delegate_task(task)
+       • update_status()
+       • handle_event(event)
+   - The ManagerAgent (or FlowOrchestratorAgent) must coordinate delegation and reassign tasks if failures occur.
+
+3. Flexible Task Management:
+   - Define a Task model (using pydantic) with:
+       • task_id, description, expected_output, execution mode (sync/async), priority, dependencies, timeout, and retry_policy.
+   - Implement a TaskManager that schedules, executes, and retries tasks as defined.
+
+4. Crew Formation & Task Flows:
+   - Create a Crew class that groups agents.
+   - Implement explicit methods:
+       • assign_task(task) – Select agents based on role and availability.
+       • kickoff() – Initiate the complete workflow.
+   - The Crew class must also aggregate crew-level events and performance metrics.
+
+5. Process Orchestration & Execution Strategies:
+   - Implement an abstract ExecutionStrategy (using the Strategy pattern) with a method execute(tasks, agents).
+   - Provide three concrete strategies:
+       • SequentialStrategy – Tasks run one after another.
+       • HierarchicalStrategy – ManagerAgent delegates tasks and monitors progress.
+       • ConsensualStrategy – Agents agree on the execution order.
+   - ManagerAgent must implement delegate_tasks(tasks).
+
+6. Event-Driven Flows (Observer Pattern):
+   - Develop an Event class and a Singleton EventManager.
+   - Agents subscribe to and publish events (e.g., task completed, error, configuration change).
+   - All agents must implement handle_event(event) to react to published events.
+
+7. Tool Integration via Facade:
+   - Create a ToolFacade class that exposes a unified method:
+       • execute_tool(tool_name, *args, **kwargs)
+   - Integrate the following tools:
+       • WebScraperTool
+       • FileReaderTool
+       • CodeInterpreterTool
+   - Support dynamic loading of custom tool plugins.
+
+8. YAML Configuration & Self-Updating:
+   - Use YAML files (e.g., config.yaml) to define settings for agents, tasks, orchestration, tools, and external integrations.
+   - Write a configuration loader that validates settings with pydantic.
+   - Implement a file watcher (e.g., with watchdog) to detect changes to the YAML files.
+   - On detecting a change, automatically reload configuration and hot-swap modules (self-updating behavior).
+
+9. External Integrations & Model Flexibility:
+   - Define an abstract LLMInterface with:
+       • process_text(text: str) → str
+       • generate_response(prompt: str) → str
+   - Implement OpenAILLM (primary) and CohereLLM (fallback).
+   - Integrate Weaviate for vector database operations (insert, search, update, delete).
+
+10. Production-Grade Features:
+    - Implement robust error handling (try/except with retries per retry_policy).
+    - Use centralized logging and telemetry; integrate a LoggingAgent and Telemetry module.
+    - Maintain state management for each agent and a central state manager.
+    - Secure all inputs and manage secrets via environment variables.
+    - Use Dependency Injection to decouple components.
+
+11. Test Case Generation & Mapping Pipeline:
+    - Define the explicit process flow:
+         a. User Interaction: A test manager uploads wireframes and submits test requirements via a UI or API.
+         b. RequirementInputAgent: Receives, cleans, and validates raw test requirement text; stores uploaded wireframes as artifacts.
+         c. NLPParsingAgent: Uses the LLM to parse cleaned text, extracting structured details (primary action, target object, expected outcome).
+         d. TestCaseMappingAgent: Generates a formatted test case (Gherkin/Zephyr Scale format) from the structured data.
+         e. ValidationAgent: Validates that the generated test case includes required elements (e.g., “Given”, “When”, “Then”).
+         f. ChangeDetectionAgent: Continuously monitors stored wireframes/requirements for updates.
+         g. TestCaseUpdateAgent: Upon detecting changes, triggers re-generation of test cases.
+         h. StorageIntegrationAgent: Stores validated test cases in Zephyr Scale and a vector database for semantic search.
+         i. QueryInterfaceAgent: Provides a natural language query interface for retrieving test case information.
+         j. FlowOrchestratorAgent: Oversees the complete pipeline and ensures proper data flow.
+         k. LoggingAgent: Logs each step for auditing, debugging, and performance monitoring.
+
+12. Testing & Zephyr Integration:
+    - Provide unit tests for all modules (agents, task management, orchestration, events, tools, and test case pipeline).
+    - Develop integration tests that simulate the complete workflow from user input to test case storage.
+    - Expose endpoints or CLI commands for manual testing with Zephyr.
+
+13. Advanced Design Patterns & Code Quality:
+    - Implement the following patterns:
+         • Factory Pattern: For dynamic creation of agents and tasks from YAML.
+         • Singleton Pattern: For EventManager and ConfigManager.
+         • Decorator Pattern: For logging, caching, and error handling wrappers.
+         • Dependency Injection: To decouple modules and ease testing.
+    - All code must include inline comments, follow PEP8, and be formatted (e.g., using Black).
+
+Project Structure:
+------------------
+project-root/
+├── config/
+│   ├── config.yaml         # Defines agents, tasks, tools, orchestration, integrations.
+│   └── config_loader.py    # Loads YAML and validates with pydantic.
+├── agents/
+│   ├── base_agent.py       # BaseAgent class with common methods.
+│   ├── data_collector.py   # DataCollectorAgent implementation.
+│   ├── analyzer.py         # AnalyzerAgent implementation.
+│   ├── strategist.py       # StrategistAgent implementation.
+│   ├── manager.py          # ManagerAgent implementation.
+│   ├── reporter.py         # ReporterAgent implementation.
+│   ├── requirement_input.py  # RequirementInputAgent implementation.
+│   ├── nlp_parsing.py        # NLPParsingAgent implementation.
+│   ├── test_case_mapping.py  # TestCaseMappingAgent implementation.
+│   ├── validation.py         # ValidationAgent implementation.
+│   ├── change_detection.py   # ChangeDetectionAgent implementation.
+│   ├── test_case_update.py   # TestCaseUpdateAgent implementation.
+│   ├── storage_integration.py # StorageIntegrationAgent implementation.
+│   ├── query_interface.py     # QueryInterfaceAgent implementation.
+│   ├── flow_orchestrator.py   # FlowOrchestratorAgent implementation.
+│   └── logging_agent.py       # LoggingAgent implementation.
+├── tasks/
+│   ├── task.py             # Task model definition.
+│   └── task_manager.py     # TaskManager for scheduling and execution.
+├── orchestration/
+│   ├── execution_strategy.py   # Abstract ExecutionStrategy class.
+│   ├── sequential_strategy.py  # SequentialStrategy implementation.
+│   ├── hierarchical_strategy.py# HierarchicalStrategy implementation.
+│   └── consensual_strategy.py  # ConsensualStrategy implementation.
+├── events/
+│   ├── event.py            # Event class.
+│   └── event_manager.py    # Singleton EventManager.
+├── tools/
+│   ├── tool_facade.py      # Facade for tool integration.
+│   ├── web_scraper_tool.py # WebScraperTool implementation.
+│   ├── file_reader_tool.py # FileReaderTool implementation.
+│   └── code_interpreter_tool.py  # CodeInterpreterTool implementation.
+├── integrations/
+│   ├── llm_interface.py    # Abstract LLMInterface.
+│   ├── openai_llm.py       # OpenAILLM implementation.
+│   ├── cohere_llm.py       # CohereLLM implementation.
+│   └── weaviate_integration.py  # Weaviate integration.
+├── telemetry/
+│   ├── logger.py           # Centralized logging configuration.
+│   └── telemetry.py        # Telemetry and monitoring integration.
+└── tests/
+    ├── test_agents.py      # Unit tests for all agent implementations.
+    ├── test_tasks.py       # Unit tests for tasks and TaskManager.
+    ├── test_orchestration.py  # Tests for execution strategies.
+    ├── test_events.py      # Tests for EventManager and event flows.
+    └── test_tools.py       # Tests for ToolFacade and tool plugins.
+
+Instructions:
+-------------
+1. Follow the project structure exactly as specified.
+2. Implement every module with explicit methods and clear, unambiguous behavior.
+3. Self-updating must be implemented: any changes to YAML configurations automatically trigger module updates.
+4. Implement the complete test case generation and mapping pipeline as described in Requirement 11.
+5. All code must be documented with inline comments; no assumptions or interpretations are allowed.
+6. Adhere strictly to the outlined design patterns and requirements.
+7. whenever you make any changes/additions to the code, please explain in detail how that change affects from architectural standpoint.
+
+Final Deliverable:
+------------------
+A complete, production-ready, self-updating CrewAI multi-agent system that processes user test requirements, generates mapped test cases, and supports querying—all exactly as specified.
+"""
+Please do not change env file that is already created

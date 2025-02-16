@@ -7,6 +7,9 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 import traceback
 from integrations.weaviate_integration import WeaviateIntegration
+from integrations.weaviate_schema import WeaviateSchema
+from routes.health import health_bp
+from routes.test_cases import test_cases_bp
 
 # Configure logging
 logging.basicConfig(
@@ -24,55 +27,20 @@ logger.info("Environment variables loaded")
 
 # Create Flask app
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev_secret_key_123")
+CORS(app)
 
-# Configure for Replit environment
-app.config['PREFERRED_URL_SCHEME'] = 'https'
-
-def init_weaviate():
-    """Initialize Weaviate client"""
-    try:
-        logger.info("Attempting to initialize Weaviate client...")
-        # Log Weaviate configuration (without sensitive values)
-        weaviate_url = os.getenv("WEAVIATE_URL")
-        weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
-
-        if not weaviate_url or not weaviate_api_key:
-            logger.error("Missing Weaviate credentials")
-            logger.debug(f"WEAVIATE_URL present: {bool(weaviate_url)}")
-            logger.debug(f"WEAVIATE_API_KEY present: {bool(weaviate_api_key)}")
-            return False
-
-        logger.info(f"Initializing Weaviate with URL: {weaviate_url}")
-        weaviate_client = WeaviateIntegration()
-
-        if weaviate_client and weaviate_client.is_healthy():
-            logger.info("✅ Weaviate client initialized successfully")
-            app.config['weaviate_client'] = weaviate_client
-            return True
-        else:
-            logger.error("⚠️ Weaviate client not healthy")
-            return False
-
-    except Exception as e:
-        logger.error("❌ Error initializing Weaviate client: %s", str(e))
-        logger.error(traceback.format_exc())
-        return False
-
-# Initialize Weaviate client on startup
-if not init_weaviate():
-    logger.error("Failed to initialize Weaviate client on startup")
+# Initialize Weaviate client
+try:
+    weaviate_client = WeaviateIntegration()
+    app.config['weaviate_client'] = weaviate_client
+    logger.info("Weaviate client initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize Weaviate client: {str(e)}")
+    app.config['weaviate_client'] = None
 
 # Register blueprints
-try:
-    logger.info("Registering test_cases blueprint")
-    from routes.test_cases import test_cases_bp
-    app.register_blueprint(test_cases_bp)
-    logger.info("Successfully registered test_cases blueprint")
-except Exception as e:
-    logger.error(f"Error registering blueprint: {str(e)}")
-    logger.error(traceback.format_exc())
+app.register_blueprint(health_bp)
+app.register_blueprint(test_cases_bp)
 
 @app.before_request
 def log_request_info():
@@ -90,43 +58,15 @@ def index():
         logger.error(f"Error rendering index page: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
 
-@app.route('/api/health')
-def health_check():
-    """Check system health"""
+@app.route('/test-cases')
+def test_cases_page():
+    """Render test cases management page"""
     try:
-        weaviate_client = app.config.get('weaviate_client')
-        weaviate_status = False
-        weaviate_error = None
-
-        if weaviate_client and weaviate_client.is_healthy():
-            weaviate_status = True
-        else:
-            weaviate_error = "Weaviate client not healthy or not initialized"
-            # Try to reinitialize
-            if init_weaviate():
-                weaviate_status = True
-                weaviate_error = None
-
-        status = {
-            'weaviate': {
-                'connected': weaviate_status,
-                'error': weaviate_error
-            },
-            'server': True
-        }
-
-        logger.info("Health check status: %s", status)
-        return jsonify(status)
+        logger.debug("Rendering test cases page")
+        return render_template('test_cases.html')
     except Exception as e:
-        logger.error("Health check failed: %s", str(e))
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'weaviate': {
-                'connected': False,
-                'error': str(e)
-            },
-            'server': True
-        })
+        logger.error(f"Error rendering test cases page: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.errorhandler(404)
 def not_found(error):
@@ -138,12 +78,17 @@ def server_error(error):
     logger.error(f"Server error: {str(error)}")
     return jsonify({"error": "Internal server error"}), 500
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
+        # Get port from environment variable with default to 5000
         port = int(os.environ.get('PORT', 5000))
         logger.info(f"Starting Flask server on port {port}")
-        app.run(host='0.0.0.0', port=port, debug=True)
+
+        app.run(
+            host='0.0.0.0',
+            port=port,
+            debug=True
+        )
     except Exception as e:
-        logger.error(f"Failed to start server: {str(e)}")
-        logger.error(traceback.format_exc())
+        logger.error(f"Failed to start app: {str(e)}")
         sys.exit(1)

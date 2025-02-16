@@ -1,6 +1,6 @@
 """RequirementInputAgent for processing test requirements."""
 import logging
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 
 class RequirementInput(BaseModel):
@@ -10,11 +10,26 @@ class RequirementInput(BaseModel):
     project_key: Optional[str] = None
 
 class CleanedRequirement(BaseModel):
-    """Model for cleaned test requirements"""
-    title: str
-    description: str
-    acceptance_criteria: List[str]
-    prerequisites: Optional[List[str]] = None
+    """Model for cleaned requirement input"""
+    title: str = Field(..., description="Title of the test case")
+    description: str = Field(..., description="Description of what needs to be tested")
+    acceptance_criteria: List[str] = Field(default_factory=list, description="List of acceptance criteria")
+    prerequisites: Optional[List[str]] = Field(default_factory=list, description="List of prerequisites")
+    
+    @classmethod
+    def from_text(cls, text: str):
+        """Create from raw text input"""
+        # Basic parsing logic - you can enhance this
+        lines = text.strip().split('\n')
+        title = lines[0] if lines else "Untitled Test Case"
+        description = lines[1] if len(lines) > 1 else ""
+        
+        return cls(
+            title=title,
+            description=description,
+            acceptance_criteria=[],
+            prerequisites=[]
+        )
 
 class RequirementInputAgent:
     """Agent for cleaning and processing test requirements"""
@@ -27,9 +42,9 @@ class RequirementInputAgent:
         try:
             # Split the raw text into sections
             lines = requirement.raw_text.strip().split('\n')
-            title = lines[0].strip()
+            title = lines[0].strip() if lines else "Untitled Test Case"
 
-            # Extract description and acceptance criteria
+            # Initialize lists with default empty values
             description = ""
             acceptance_criteria = []
             prerequisites = []
@@ -40,13 +55,15 @@ class RequirementInputAgent:
                 if not line:
                     continue
 
-                if line.lower().startswith("acceptance criteria:"):
+                # Check for section headers
+                if "acceptance criteria:" in line.lower():
                     current_section = "acceptance"
                     continue
-                elif line.lower().startswith("prerequisites:"):
+                elif "prerequisites:" in line.lower():
                     current_section = "prerequisites"
                     continue
 
+                # Add content to appropriate section
                 if current_section == "description":
                     description += line + " "
                 elif current_section == "acceptance":
@@ -60,11 +77,12 @@ class RequirementInputAgent:
                     else:
                         prerequisites.append(line)
 
+            # Ensure we have at least empty lists
             return CleanedRequirement(
                 title=title,
                 description=description.strip(),
-                acceptance_criteria=acceptance_criteria,
-                prerequisites=prerequisites if prerequisites else None
+                acceptance_criteria=acceptance_criteria or [],  # Ensure we have at least an empty list
+                prerequisites=prerequisites or []  # Ensure we have at least an empty list
             )
 
         except Exception as e:

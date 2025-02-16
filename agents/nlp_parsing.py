@@ -1,24 +1,29 @@
 """NLPParsingAgent for extracting structured test details using OpenAI."""
 import logging
 import os
-from typing import List, Dict
-from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
 from openai import OpenAI
 from agents.requirement_input import CleanedRequirement
 
 class TestStep(BaseModel):
-    """Model for a structured test step"""
+    """Model for a single test step"""
     step: str
     test_data: str
     expected_result: str
 
 class ParsedTestCase(BaseModel):
-    """Model for parsed test case details"""
-    name: str
-    objective: str
-    precondition: str
-    automation_needed: bool
-    steps: List[Dict[str, str]]
+    """Model for parsed test case output"""
+    name: str = Field(..., description="Name/title of the test case")
+    objective: str = Field(..., description="Test case objective/description")
+    precondition: str = Field(default="None", description="Preconditions for the test")
+    automation_needed: bool = Field(default=False, description="Whether automation is recommended")
+    steps: List[TestStep] = Field(default_factory=list, description="Test steps")
+    expected_results: List[str] = Field(default_factory=list, description="Expected results")
+
+    def get_expected_results(self) -> List[str]:
+        """Extract expected results from steps"""
+        return [step.expected_result for step in self.steps]
 
 class NLPParsingAgent:
     """Agent for parsing cleaned requirements into structured test cases"""
@@ -70,20 +75,24 @@ Format your response as JSON with the following structure:
 
             # Call OpenAI API
             response = self.openai_client.chat.completions.create(
-                model="gpt-4o",  # the newest OpenAI model is "gpt-4o" which was released May 13, 2024
+                model="gpt-4",
                 messages=[
-                    {"role": "system", "content": "You are a test case generation expert."},
+                    {"role": "system", "content": "You are a test case generation expert. Always respond with valid JSON only."},
                     {"role": "user", "content": prompt}
                 ],
-                response_format={"type": "json_object"}
+                temperature=0.7  # Add some temperature for creativity while maintaining structure
             )
 
             # Parse the response
-            test_case_data = response.choices[0].message.content
+            test_case_data = response.choices[0].message.content.strip()
             self.logger.debug(f"Generated test case data: {test_case_data}")
 
             # Create ParsedTestCase object
             parsed_case = ParsedTestCase.parse_raw(test_case_data)
+            
+            # Set expected results from steps
+            parsed_case.expected_results = parsed_case.get_expected_results()
+            
             self.logger.info(f"Successfully parsed test case: {parsed_case.name}")
 
             return parsed_case

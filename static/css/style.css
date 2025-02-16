@@ -215,28 +215,22 @@ body {
 }
 
 .container {
-    max-width: 1200px;
+    max-width: 800px;
     margin: 0 auto;
     padding: 20px;
 }
 
-.section {
+.input-section, .results-section, .search-section {
     margin-bottom: 30px;
     padding: 20px;
     border: 1px solid #ddd;
     border-radius: 5px;
 }
 
-textarea, input[type="text"] {
+textarea {
     width: 100%;
     padding: 10px;
-    margin: 10px 0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
-
-textarea {
-    height: 150px;
+    margin-bottom: 10px;
 }
 
 button {
@@ -244,7 +238,7 @@ button {
     background-color: #007bff;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     cursor: pointer;
 }
 
@@ -252,28 +246,8 @@ button:hover {
     background-color: #0056b3;
 }
 
-.result-box {
-    margin-top: 20px;
-    padding: 15px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: #f9f9f9;
-}
-
-.error {
-    color: red;
-}
-
-pre {
-    white-space: pre-wrap;
-    background-color: #f5f5f5;
+#searchInput {
+    width: 100%;
     padding: 10px;
-    border-radius: 4px;
-}
-
-.test-case {
     margin-bottom: 20px;
-    padding: 15px;
-    border: 1px solid #eee;
-    border-radius: 4px;
 }

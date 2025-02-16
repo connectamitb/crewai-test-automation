@@ -1,10 +1,12 @@
 """Routes for test case management"""
 import logging
 import os
-from flask import Blueprint, request, jsonify, current_app
-from agents.requirement_input import CleanedRequirement
+from flask import Blueprint, request, jsonify, current_app, render_template
+from agents.requirement_input import RequirementInput, RequirementInputAgent
 from agents.nlp_parsing import NLPParsingAgent
 from integrations.models import TestCase
+from integrations.weaviate_integration import WeaviateIntegration
+from weaviate.classes.query import MetadataQuery
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -15,188 +17,123 @@ test_cases_bp = Blueprint('test_cases', __name__)
 
 @test_cases_bp.route('/api/v1/test-cases', methods=['POST'])
 def create_test_case():
-    """Create and store a test case"""
+    """Generate and store test case from requirement"""
     try:
-        # First, verify OpenAI API key
-        openai_key = os.getenv("OPENAI_API_KEY")
-        if not openai_key:
-            logger.error("OpenAI API key not found in environment")
-            return jsonify({
-                'status': 'error',
-                'message': 'OpenAI API key not configured'
-            }), 500
-
-        # Get request data
         data = request.get_json()
-        logger.debug("Received request data: %s", data)
-
         if not data or 'requirement' not in data:
-            logger.error("Missing requirement field in request data")
-            return jsonify({
-                'status': 'error',
-                'message': 'Missing requirement field'
-            }), 400
+            return jsonify({'error': 'Requirement is required'}), 400
 
-        # Create cleaned requirement
-        cleaned_req = CleanedRequirement(
-            title="Test Case",
-            description=data['requirement'],
-            prerequisites=[],
-            acceptance_criteria=[]
-        )
+        # Initialize agents and client
+        requirement_agent = RequirementInputAgent()
+        nlp_agent = NLPParsingAgent()
+        weaviate_client = WeaviateIntegration()
 
-        # Parse requirements into lines
-        lines = data['requirement'].split('\n')
-        current_section = None
+        # 1. Clean requirement
+        req_input = RequirementInput(raw_text=data['requirement'])
+        cleaned_req = requirement_agent.clean_requirement(req_input)
+        logger.info(f"Cleaned requirement: {cleaned_req.title}")
 
-        # Process each line to populate cleaned requirement
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+        # 2. Generate test case
+        parsed_case = nlp_agent.parse_requirement(cleaned_req)
+        logger.info(f"Generated test case: {parsed_case.name}")
 
-            if "Prerequisites:" in line:
-                current_section = "prerequisites"
-                continue
-            elif "Acceptance Criteria:" in line:
-                current_section = "acceptance_criteria"
-                continue
-            elif "Description:" in line:
-                cleaned_req.description = line.replace("Description:", "").strip()
-                continue
-            elif not current_section and line:  # First non-empty line is title
-                cleaned_req.title = line
-                continue
-
-            # Add items to appropriate section
-            if current_section == "prerequisites" and line.startswith("-"):
-                if cleaned_req.prerequisites is None:
-                    cleaned_req.prerequisites = []
-                cleaned_req.prerequisites.append(line[1:].strip())
-            elif current_section == "acceptance_criteria" and line.startswith("-"):
-                cleaned_req.acceptance_criteria.append(line[1:].strip())
-
-        logger.debug(f"Cleaned requirement: {cleaned_req}")
-
-        try:
-            # Use NLP agent to generate structured test case
-            nlp_agent = NLPParsingAgent()
-            parsed_test_case = nlp_agent.parse_requirement(cleaned_req)
-            logger.debug(f"Parsed test case: {parsed_test_case}")
-        except Exception as e:
-            logger.error(f"Error in NLP parsing: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'message': f'Failed to generate test case: {str(e)}'
-            }), 500
-
-        # Convert parsed test case to storage format
+        # 3. Convert to TestCase model
         test_case = TestCase(
-            name=parsed_test_case.name,
-            description=parsed_test_case.objective,
-            steps=[step["step"] for step in parsed_test_case.steps],
-            expected_results=[step["expected_result"] for step in parsed_test_case.steps]
+            name=parsed_case.name,
+            description=parsed_case.objective,
+            requirement=cleaned_req.description,
+            precondition=parsed_case.precondition,
+            steps=[step.step for step in parsed_case.steps],
+            expected_results=parsed_case.expected_results,
+            priority="High",
+            tags=["security", "authentication"],
+            automation_status="Not Started" if not parsed_case.automation_needed else "Recommended"
         )
-        logger.debug("Created TestCase object: %s", test_case)
 
-        # Get Weaviate client
-        weaviate_client = current_app.config.get('weaviate_client')
-        if not weaviate_client:
-            logger.error("Weaviate client not found in app config")
-            return jsonify({
-                'status': 'error',
-                'message': 'Storage service not initialized'
-            }), 503
+        # 4. Store in Weaviate
+        case_id = weaviate_client.store_test_case(test_case.to_weaviate_format())
+        if not case_id:
+            return jsonify({'error': 'Failed to store test case'}), 500
 
-        # Check Weaviate health
-        if not weaviate_client.is_healthy():
-            logger.error("Weaviate client is not healthy")
-            return jsonify({
-                'status': 'error',
-                'message': 'Storage service is not healthy'
-            }), 503
-
-        # Store the test case
-        logger.debug("Attempting to store test case in Weaviate")
-        case_id = weaviate_client.store_test_case(test_case)
-
-        if case_id:
-            logger.info("Successfully stored test case with ID: %s", case_id)
-            return jsonify({
-                'status': 'success',
-                'message': 'Test case created successfully',
-                'test_case': {
-                    'id': case_id,
-                    'name': test_case.name,
-                    'description': test_case.description,
-                    'steps': test_case.steps,
-                    'expected_results': test_case.expected_results
-                }
-            }), 201
-        else:
-            logger.error("Failed to store test case - no ID returned")
-            return jsonify({
-                'status': 'error',
-                'message': 'Failed to store test case in database'
-            }), 500
+        return jsonify({
+            'message': 'Test case created successfully',
+            'test_case': {
+                'id': case_id,
+                'name': test_case.name,
+                'description': test_case.description,
+                'steps': test_case.steps,
+                'expected_results': test_case.expected_results,
+                'priority': test_case.priority,
+                'automation_status': test_case.automation_status
+            }
+        }), 201
 
     except Exception as e:
-        logger.error("Error creating test case: %s", str(e), exc_info=True)
-        return jsonify({
-            'status': 'error',
-            'message': f'Internal error: {str(e)}'
-        }), 500
+        logger.error(f"Error creating test case: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
-@test_cases_bp.route('/api/v1/test-cases/search', methods=['GET'])
+@test_cases_bp.route('/api/v1/test-cases/search')
 def search_test_cases():
     """Search for test cases"""
     try:
-        query = request.args.get('q', '')
+        query = request.args.get('q')
         if not query:
-            return jsonify({
-                "status": "error",
-                "message": "Search query is required"
-            }), 400
+            return jsonify({'error': 'Search query is required'}), 400
 
-        weaviate_client = current_app.config.get('weaviate_client')
-        if not weaviate_client:
-            return jsonify({
-                "status": "error",
-                "message": "Search service not available"
-            }), 503
+        weaviate_client = WeaviateIntegration()
+        collection = weaviate_client.client.collections.get("TestCase")
 
-        results = weaviate_client.search_test_cases(query)
+        # Perform semantic search
+        response = collection.query.near_text(
+            query=query,
+            limit=5,
+            return_metadata=MetadataQuery(distance=True),
+            return_properties=[
+                "name", "description", "steps", 
+                "expected_results", "tags", "priority"
+            ]
+        )
+
+        results = []
+        if response.objects:
+            for obj in response.objects:
+                results.append({
+                    'name': obj.properties['name'],
+                    'description': obj.properties['description'],
+                    'steps': obj.properties['steps'],
+                    'expected_results': obj.properties.get('expected_results', []),
+                    'tags': obj.properties.get('tags', []),
+                    'priority': obj.properties.get('priority', 'Medium'),
+                    'relevance_score': 1 - obj.metadata.distance
+                })
+
         return jsonify({
-            "status": "success",
-            "results": results
-        })
+            'results': results,
+            'total': len(results)
+        }), 200
 
     except Exception as e:
-        logger.error("Search error: %s", str(e))
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        logger.error(f"Error searching test cases: {str(e)}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
-@test_cases_bp.route('/api/v1/test-cases/<name>', methods=['GET'])
-def get_test_case(name):
-    """Get a test case by name"""
+# Optional: Get specific test case
+@test_cases_bp.route('/api/v1/test-cases/<case_id>', methods=['GET'])
+def get_test_case(case_id):
+    """Get a specific test case by ID"""
     try:
-        # Get Weaviate client from app context
-        weaviate_client = current_app.config.get('weaviate_client')
+        weaviate_client = WeaviateIntegration()
+        test_case = weaviate_client.get_test_case(case_id)
+        
+        if not test_case:
+            return jsonify({'error': 'Test case not found'}), 404
 
-        if not weaviate_client or not weaviate_client.is_healthy():
-            logger.error("Weaviate client not available")
-            return jsonify({
-                "error": "Service temporarily unavailable"
-            }), 503
-
-        result = weaviate_client.get_test_case(name)
-        if result is None:
-            return jsonify({"error": "Test case not found"}), 404
-
-        return jsonify({"status": "success", "test_case": result}), 200
+        return jsonify(test_case), 200
 
     except Exception as e:
         logger.error(f"Error retrieving test case: {str(e)}", exc_info=True)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
+
+@test_cases_bp.route('/test-cases', methods=['GET'])
+def test_cases_page():
+    """Render test cases management page"""
+    return render_template('test_cases.html')

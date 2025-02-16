@@ -64,6 +64,8 @@
     <div class="max-w-7xl mx-auto px-4">
       <div class="bg-white rounded-lg shadow p-6">
         <h2 class="text-2xl font-bold mb-4">Create Test Case from Requirements</h2>
+        
+        <!-- Test Case Creation Form -->
         <form id="testCaseForm" class="space-y-4">
           <div>
             <label class="block text-gray-700 mb-2">Test Requirements</label>
@@ -92,47 +94,74 @@ Acceptance Criteria:
             <label class="block text-gray-700 mb-2">Project Key</label>
             <input 
               type="text" 
-              id="projectKey" 
-              name="project_key" 
+              id="projectKey"
               class="w-full border rounded p-2"
-              placeholder="Enter project identifier (e.g., TEST-123)"
-            />
+              placeholder="e.g., TEST-123"
+            >
           </div>
 
-          <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+          <button 
+            type="submit"
+            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+          >
             Generate Test Case
           </button>
         </form>
 
-        <!-- Test Case Results Section -->
-        <div id="testCaseResults" class="mt-6 hidden">
-          <h3 class="text-xl font-bold mb-4">Generated Test Case</h3>
-          <div class="bg-gray-50 p-4 rounded-lg border">
-            <div class="mb-4">
-              <h4 class="font-semibold">Name:</h4>
-              <p id="resultName" class="text-gray-700"></p>
-            </div>
-            <div class="mb-4">
-              <h4 class="font-semibold">Description:</h4>
-              <p id="resultDescription" class="text-gray-700"></p>
-            </div>
-            <div class="mb-4">
-              <h4 class="font-semibold">Steps:</h4>
-              <ul id="resultSteps" class="list-disc list-inside text-gray-700">
-              </ul>
-            </div>
-            <div class="mb-4">
-              <h4 class="font-semibold">Expected Results:</h4>
-              <ul id="resultExpectedResults" class="list-disc list-inside text-gray-700">
-              </ul>
-            </div>
+        <!-- Search Test Cases Section -->
+        <div class="mt-8 pt-8 border-t">
+          <h3 class="text-xl font-bold mb-4">Search Test Cases</h3>
+          <div class="flex gap-4">
+            <input 
+              type="text" 
+              id="searchQuery"
+              class="flex-1 border rounded p-2"
+              placeholder="Search test cases..."
+            >
+            <button 
+              id="searchButton"
+              class="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+            >
+              Search
+            </button>
           </div>
+          
+          <!-- Search Results -->
+          <div id="searchResults" class="mt-4 space-y-4"></div>
         </div>
+      </div>
+    </div>
+  </section>
 
-        <!-- Example Requirements Section -->
-        <div class="mt-6 p-4 bg-gray-50 rounded">
-          <h3 class="text-lg font-semibold mb-2">Example Requirement Format:</h3>
-          <pre class="whitespace-pre-wrap text-sm text-gray-600">
+  <!-- Test Case Results Section -->
+  <div id="testCaseResults" class="mt-6 hidden">
+    <h3 class="text-xl font-bold mb-4">Generated Test Case</h3>
+    <div class="bg-gray-50 p-4 rounded-lg border">
+      <div class="mb-4">
+        <h4 class="font-semibold">Name:</h4>
+        <p id="resultName" class="text-gray-700"></p>
+      </div>
+      <div class="mb-4">
+        <h4 class="font-semibold">Description:</h4>
+        <p id="resultDescription" class="text-gray-700"></p>
+      </div>
+      <div class="mb-4">
+        <h4 class="font-semibold">Steps:</h4>
+        <ul id="resultSteps" class="list-disc list-inside text-gray-700">
+        </ul>
+      </div>
+      <div class="mb-4">
+        <h4 class="font-semibold">Expected Results:</h4>
+        <ul id="resultExpectedResults" class="list-disc list-inside text-gray-700">
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Example Requirements Section -->
+  <div class="mt-6 p-4 bg-gray-50 rounded">
+    <h3 class="text-lg font-semibold mb-2">Example Requirement Format:</h3>
+    <pre class="whitespace-pre-wrap text-sm text-gray-600">
 Login Feature Test
 Description: Verify that users can successfully log in to the application using valid credentials.
 
@@ -147,45 +176,8 @@ Acceptance Criteria:
 - System validates password requirements
 - User receives error message for invalid credentials
 - User is redirected to dashboard after successful login
-          </pre>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Search Test Cases Section -->
-  <section class="py-12">
-    <div class="max-w-7xl mx-auto px-4">
-      <div class="bg-white rounded-lg shadow p-6">
-        <h2 class="text-2xl font-bold mb-4">Search Test Cases</h2>
-        <form id="searchForm" class="space-y-4">
-          <div>
-            <label class="block text-gray-700 mb-2">Search Query</label>
-            <input 
-              type="text" 
-              id="searchQuery" 
-              name="query" 
-              class="w-full border rounded p-2"
-              required
-              placeholder="Enter keywords to search test cases (e.g., login, authentication)"
-            />
-          </div>
-
-          <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-            Search Test Cases
-          </button>
-        </form>
-
-        <!-- Search Results Section -->
-        <div id="searchResults" class="mt-6 hidden">
-          <h3 class="text-xl font-bold mb-4">Search Results</h3>
-          <div id="resultsList" class="space-y-4">
-            <!-- Results will be dynamically inserted here -->
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+    </pre>
+  </div>
 
   <!-- Add Health Check Modal -->
   <div id="healthCheckModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden">
@@ -472,5 +464,5 @@ Acceptance Criteria:
     });
   </script>
 
-  </body>
+</body>
 </html>
